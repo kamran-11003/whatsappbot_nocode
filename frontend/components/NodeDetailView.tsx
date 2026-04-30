@@ -471,6 +471,194 @@ function ParameterFields({
           </p>
         </>
       );
+    case "question":
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Sends the prompt below, then <span className="text-purple-400">pauses</span> the flow
+            until the user replies. The reply is stored in the named variable and the flow resumes
+            from the next node.
+          </p>
+          <Label>Prompt</Label>
+          <Text
+            rows={3}
+            value={d.prompt || ""}
+            onChange={(e: any) => set("prompt", e.target.value)}
+            placeholder="What is your name?"
+          />
+          <Label>Store reply in variable</Label>
+          <Input
+            value={d.variable || ""}
+            onChange={(e: any) => set("variable", e.target.value)}
+            placeholder="name"
+          />
+          <Label>Input type</Label>
+          <select
+            value={d.input_type || "text"}
+            onChange={(e) => set("input_type", e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+          >
+            <option value="text">Free text</option>
+            <option value="buttons">Quick reply buttons (max 3)</option>
+            <option value="list">Selectable list (max 10)</option>
+          </select>
+          {(d.input_type || "text") === "buttons" && (
+            <div className="mt-2 space-y-1">
+              <div className="text-[10px] text-slate-500">
+                WhatsApp limit: 3 buttons, 20 chars each.
+              </div>
+              {[0, 1, 2].map((i) => (
+                <Input
+                  key={i}
+                  value={(d.buttons || [])[i] || ""}
+                  maxLength={20}
+                  onChange={(e: any) => {
+                    const next = [...(d.buttons || ["", "", ""])];
+                    next[i] = e.target.value;
+                    set("buttons", next);
+                  }}
+                  placeholder={`Button ${i + 1}`}
+                />
+              ))}
+            </div>
+          )}
+          {(d.input_type || "text") === "list" && (
+            <div className="mt-2 space-y-2">
+              <div className="text-[10px] text-slate-500">
+                WhatsApp limit: 10 rows, title ≤ 24 chars, description ≤ 72 chars.
+              </div>
+              <Label>List trigger button label</Label>
+              <Input
+                value={d.list_button || ""}
+                maxLength={20}
+                onChange={(e: any) => set("list_button", e.target.value)}
+                placeholder="Choose"
+              />
+              <div className="space-y-1">
+                {((d.list_rows && d.list_rows.length ? d.list_rows : [{ title: "", description: "" }]) as any[]).map((row, i) => (
+                  <div key={i} className="border border-slate-800 rounded p-2 space-y-1 bg-slate-950">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500">Row {i + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = [...(d.list_rows || [])];
+                          next.splice(i, 1);
+                          set("list_rows", next.length ? next : [{ title: "", description: "" }]);
+                        }}
+                        className="text-[10px] text-red-400 hover:text-red-300"
+                      >
+                        remove
+                      </button>
+                    </div>
+                    <Input
+                      value={row.title || ""}
+                      maxLength={24}
+                      onChange={(e: any) => {
+                        const next = [...(d.list_rows || [])];
+                        next[i] = { ...next[i], title: e.target.value };
+                        set("list_rows", next);
+                      }}
+                      placeholder="Title (required)"
+                    />
+                    <Input
+                      value={row.description || ""}
+                      maxLength={72}
+                      onChange={(e: any) => {
+                        const next = [...(d.list_rows || [])];
+                        next[i] = { ...next[i], description: e.target.value };
+                        set("list_rows", next);
+                      }}
+                      placeholder="Description (optional)"
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={(d.list_rows || []).length >= 10}
+                onClick={() => {
+                  const next = [...(d.list_rows || []), { title: "", description: "" }];
+                  set("list_rows", next.slice(0, 10));
+                }}
+                className="text-xs bg-slate-800 hover:bg-slate-700 disabled:opacity-50 px-2 py-1 rounded"
+              >
+                + Add row
+              </button>
+            </div>
+          )}
+          <p className="text-[10px] text-slate-500 mt-2">
+            Use <code className="text-emerald-400">{"{{" + (d.variable || "name") + "}}"}</code> in
+            downstream nodes.
+          </p>
+        </>
+      );
+    case "validation":
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Validates a variable. <span className="text-emerald-400">ok</span> passes through;
+            <span className="text-red-400"> fail</span> sends the error message and clears the
+            variable so you can loop back to a Question to re-ask.
+          </p>
+          <Label>Variable to validate</Label>
+          <Input
+            value={d.variable || ""}
+            onChange={(e: any) => set("variable", e.target.value)}
+            placeholder="e.g. number"
+          />
+          <Label>Rule</Label>
+          <select
+            value={d.rule || "non_empty"}
+            onChange={(e) => set("rule", e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+          >
+            <option value="non_empty">Not empty</option>
+            <option value="digits">Digits only (optionally exact length)</option>
+            <option value="length">Exact length</option>
+            <option value="min_length">Minimum length</option>
+            <option value="max_length">Maximum length</option>
+            <option value="email">Email address</option>
+            <option value="regex">Regex match</option>
+          </select>
+          {["digits", "length", "min_length", "max_length", "regex"].includes(d.rule || "") && (
+            <>
+              <Label>
+                {d.rule === "regex"
+                  ? "Regex pattern"
+                  : d.rule === "digits"
+                  ? "Required digit count (blank = any)"
+                  : "Length"}
+              </Label>
+              <Input
+                value={d.pattern || ""}
+                onChange={(e: any) => set("pattern", e.target.value)}
+                placeholder={d.rule === "regex" ? "^[A-Za-z]+$" : d.rule === "digits" ? "11" : "e.g. 11"}
+              />
+            </>
+          )}
+          <Label>Error message (sent on fail)</Label>
+          <Text
+            rows={2}
+            value={d.error_message || ""}
+            onChange={(e: any) => set("error_message", e.target.value)}
+            placeholder="Please enter exactly 11 digits."
+          />
+          <label className="flex items-center gap-2 mt-2 text-xs text-slate-300">
+            <input
+              type="checkbox"
+              checked={d.clear_on_fail !== false}
+              onChange={(e) => set("clear_on_fail", e.target.checked)}
+            />
+            Clear the variable on fail (so loop-back Question re-asks)
+          </label>
+          <p className="text-[10px] text-slate-500 mt-2">
+            Output handles: <span className="text-emerald-400">ok</span> /{" "}
+            <span className="text-red-400">fail</span>. Wire <em>fail</em> back to your Question to
+            loop.
+          </p>
+        </>
+      );
     default:
       return <p className="text-xs text-slate-500">No parameters.</p>;
   }
@@ -483,7 +671,7 @@ function ParameterFields({
  *
  * Hidden for control-only nodes that don't make sense as a reply source.
  */
-const NO_REPLY_TYPES = new Set(["initialize", "condition", "loop", "end"]);
+const NO_REPLY_TYPES = new Set(["initialize", "condition", "loop", "end", "question", "validation"]);
 
 function ReplyField({
   node,

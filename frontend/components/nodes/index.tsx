@@ -125,4 +125,6 @@ export const customNodeTypes = {
   initialize: nodeFor("initialize", ["out"], false),
   reply: nodeFor("reply"),
   condition: nodeFor("condition", ["true", "false"]),
+  question: nodeFor("question"),
+  validation: nodeFor("validation", ["ok", "fail"]),
 };

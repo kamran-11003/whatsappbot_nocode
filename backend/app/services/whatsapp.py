@@ -45,6 +45,54 @@ async def send_buttons(phone_number_id: str, access_token: str, to: str, text: s
         return {"status": r.status_code, "body": r.text}
 
 
+async def send_list(
+    phone_number_id: str,
+    access_token: str,
+    to: str,
+    text: str,
+    button_label: str,
+    rows: list[dict],
+    section_title: str = "Options",
+) -> dict:
+    """Send a WhatsApp interactive list message.
+
+    WhatsApp constraints (enforced here):
+      - max 10 rows total
+      - row title <= 24 chars, description <= 72 chars
+      - section title <= 24 chars, button label <= 20 chars
+    """
+    if is_dry_run():
+        return {"status": 200, "body": "<dry-run skipped>", "dry_run": True}
+    url = f"https://graph.facebook.com/{GRAPH_VERSION}/{phone_number_id}/messages"
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    safe_rows = []
+    for i, row in enumerate(rows[:10]):
+        if isinstance(row, str):
+            row = {"title": row}
+        title = (str(row.get("title", "") or "").strip()[:24]) or f"Option {i+1}"
+        out_row = {"id": str(row.get("id") or f"row_{i}"), "title": title}
+        desc = str(row.get("description", "") or "").strip()
+        if desc:
+            out_row["description"] = desc[:72]
+        safe_rows.append(out_row)
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": text},
+            "action": {
+                "button": (button_label or "Choose")[:20],
+                "sections": [{"title": (section_title or "Options")[:24], "rows": safe_rows}],
+            },
+        },
+    }
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.post(url, json=payload, headers=headers)
+        return {"status": r.status_code, "body": r.text}
+
+
 def extract_user_text(message: dict) -> str:
     """Extract text from a WhatsApp Cloud API message object."""
     mtype = message.get("type")

@@ -10,6 +10,8 @@ export type NodeDef = {
 export const NODE_DEFS: NodeDef[] = [
   { type: "reply", label: "Reply", color: "bg-blue-600", defaults: { reply: "Hello {{contact_name}}!" } },
   { type: "condition", label: "Condition", color: "bg-yellow-600", defaults: { variable: "last_user_input", operator: "contains", value: "" } },
+  { type: "question", label: "Question", color: "bg-purple-600", defaults: { prompt: "What is your name?", variable: "name", input_type: "text", buttons: ["", "", ""], list_button: "Choose", list_rows: [{ title: "", description: "" }] } },
+  { type: "validation", label: "Validation", color: "bg-rose-600", defaults: { variable: "", rule: "non_empty", pattern: "", error_message: "That doesn't look right. Please try again.", clear_on_fail: true } },
 ];
 
 export default function NodePalette() {
