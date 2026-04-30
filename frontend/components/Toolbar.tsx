@@ -8,6 +8,9 @@ import {
   Check,
   AlertCircle,
   Radio,
+  Download,
+  Upload,
+  Sparkles,
 } from "lucide-react";
 import { useRunStore } from "@/lib/runStore";
 
@@ -18,6 +21,10 @@ export default function Toolbar({
   dirty,
   onSave,
   onExecute,
+  onExport,
+  onImport,
+  onToggleAssistant,
+  assistantOpen,
 }: {
   botName: string;
   saving: boolean;
@@ -25,6 +32,10 @@ export default function Toolbar({
   dirty: boolean;
   onSave: () => void;
   onExecute: () => void;
+  onExport: () => void;
+  onImport: () => void;
+  onToggleAssistant: () => void;
+  assistantOpen: boolean;
 }) {
   const status = useRunStore((s) => s.status);
   const showDrawer = useRunStore((s) => s.showDrawer);
@@ -103,6 +114,32 @@ export default function Toolbar({
       </button>
 
       <div className="w-px h-6 bg-slate-700 mx-1" />
+
+      <div className="w-px h-6 bg-slate-700 mx-1" />
+
+      <button
+        onClick={onImport}
+        className="px-2.5 py-1.5 rounded text-xs flex items-center gap-1.5 text-slate-300 hover:bg-slate-800"
+        title="Import flow JSON"
+      >
+        <Upload size={13} /> Import
+      </button>
+      <button
+        onClick={onExport}
+        className="px-2.5 py-1.5 rounded text-xs flex items-center gap-1.5 text-slate-300 hover:bg-slate-800"
+        title="Download flow JSON"
+      >
+        <Download size={13} /> Export
+      </button>
+      <button
+        onClick={onToggleAssistant}
+        className={`px-2.5 py-1.5 rounded text-xs flex items-center gap-1.5 ${
+          assistantOpen ? "bg-violet-700 text-white" : "text-slate-300 hover:bg-slate-800"
+        }`}
+        title="AI Assistant"
+      >
+        <Sparkles size={13} /> Assistant
+      </button>
 
       <button
         onClick={onSave}

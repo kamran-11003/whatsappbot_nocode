@@ -20,6 +20,7 @@ import NodePalette, { NODE_DEFS } from "./NodePalette";
 import NodeDetailView from "./NodeDetailView";
 import Toolbar from "./Toolbar";
 import BottomDrawer from "./BottomDrawer";
+import AssistantPanel from "./AssistantPanel";
 import { customNodeTypes } from "./nodes";
 import { useRunStore } from "@/lib/runStore";
 
@@ -29,6 +30,7 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
   const [openNode, setOpenNode] = useState<Node | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const dirty = useRunStore((s) => s.dirty);
   const setDirty = useRunStore((s) => s.setDirty);
   const setRunning = useRunStore((s) => s.setRunning);
@@ -120,6 +122,61 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
       setSaving(false);
     }
   }, [botId, nodes, edges, setDirty]);
+
+  const handleExport = useCallback(() => {
+    const payload = { nodes, edges, variables: {}, exported_at: new Date().toISOString(), bot_name: botName };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(botName || "flow").replace(/[^a-z0-9_-]+/gi, "_")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [nodes, edges, botName]);
+
+  const handleImport = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const obj = JSON.parse(text);
+        if (!Array.isArray(obj?.nodes) || !Array.isArray(obj?.edges)) {
+          alert("Invalid flow file: expected { nodes: [], edges: [] }");
+          return;
+        }
+        if (!confirm(`Replace current flow with ${obj.nodes.length} nodes / ${obj.edges.length} edges?`)) return;
+        setNodes(obj.nodes);
+        setEdges(obj.edges);
+        setDirty(true);
+      } catch (e: any) {
+        alert(`Failed to import: ${e?.message || e}`);
+      }
+    };
+    input.click();
+  }, [setDirty]);
+
+  const applyAssistantFlow = useCallback(
+    (next: { nodes: Node[]; edges: Edge[] }) => {
+      const ok = confirm(
+        `Apply assistant changes? (${next.nodes.length} nodes, ${next.edges.length} edges)\nThis replaces the current flow on the canvas. Save afterwards to persist.`,
+      );
+      if (!ok) return;
+      // Ensure every node has a position so React Flow can render it.
+      const nodes = next.nodes.map((n, i) => ({
+        ...n,
+        position: n.position || { x: 100 + (i % 5) * 240, y: 100 + Math.floor(i / 5) * 160 },
+        data: n.data || {},
+      }));
+      setNodes(nodes);
+      setEdges(next.edges.map((e) => ({ ...e, animated: e.animated ?? true })));
+      setDirty(true);
+    },
+    [setDirty],
+  );
 
   // Execute full workflow: wait for the next real WhatsApp message, then
   // re-run the flow from the UI (dry_run) to populate the trace. The worker
@@ -246,6 +303,10 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
         dirty={dirty}
         onSave={handleSave}
         onExecute={handleExecute}
+        onExport={handleExport}
+        onImport={handleImport}
+        onToggleAssistant={() => setAssistantOpen((v) => !v)}
+        assistantOpen={assistantOpen}
       />
       <div className="flex-1 flex relative overflow-hidden">
         <NodePalette />
@@ -276,6 +337,13 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
           </ReactFlow>
           <BottomDrawer botId={botId} />
         </div>
+        {assistantOpen && (
+          <AssistantPanel
+            flow={{ nodes, edges }}
+            onApplyFlow={applyAssistantFlow}
+            onClose={() => setAssistantOpen(false)}
+          />
+        )}
       </div>
       {openNode && (
         <NodeDetailView
