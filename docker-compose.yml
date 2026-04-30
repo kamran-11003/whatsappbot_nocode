@@ -32,7 +32,7 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
 
   chroma:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.5.5
     container_name: wm_chroma
     restart: unless-stopped
     ports:

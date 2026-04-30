@@ -24,6 +24,7 @@ from app.services.whatsapp import send_text
 _NO_REPLY_NODE_TYPES = {
     "initialize", "condition", "loop", "end", "question", "validation",
     "media", "api_call", "set_variable", "template", "wait", "handover", "code",
+    "vector_store", "agent",
 }
 
 

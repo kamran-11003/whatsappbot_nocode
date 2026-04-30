@@ -20,6 +20,8 @@ export const NODE_DEFS: NodeDef[] = [
   { type: "loop", label: "Loop", color: "bg-fuchsia-600", defaults: { counter: "_loop_i", times: 3 } },
   { type: "handover", label: "Handover", color: "bg-orange-600", defaults: {} },
   { type: "code", label: "Code (Python)", color: "bg-zinc-700", defaults: { code: "# vars[\"new_var\"] = vars.get(\"name\", \"\").upper()\n" } },
+  { type: "vector_store", label: "Vector Store", color: "bg-emerald-700", defaults: { query: "{{last_user_input}}", top_k: 4, save_to: "kb_context" } },
+  { type: "agent", label: "Agent", color: "bg-violet-700", defaults: { instructions: "You are a helpful WhatsApp assistant. Answer concisely.", user_template: "{{last_user_input}}", context_var: "kb_context", send_reply: true, save_to: "agent_response", history_turns: 10, provider: "", model: "", api_key: "" } },
 ];
 
 export default function NodePalette() {

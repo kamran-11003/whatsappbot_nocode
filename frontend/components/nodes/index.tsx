@@ -135,4 +135,6 @@ export const customNodeTypes = {
   loop: nodeFor("loop", ["body", "out"]),
   handover: nodeFor("handover", []),
   code: nodeFor("code"),
+  vector_store: nodeFor("vector_store", ["hit", "miss"]),
+  agent: nodeFor("agent"),
 };

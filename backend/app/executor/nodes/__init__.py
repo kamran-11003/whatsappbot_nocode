@@ -18,10 +18,12 @@ from app.executor.nodes.wait import wait
 from app.executor.nodes.loop import loop
 from app.executor.nodes.handover import handover
 from app.executor.nodes.code import code
+from app.executor.nodes.vector_store import vector_store
+from app.executor.nodes.agent import agent
 from app.executor.nodes.end import end
 
 __all__ = [
     "initialize", "reply", "condition", "question", "validation", "media",
     "api_call", "set_variable", "template", "wait", "loop", "handover",
-    "code", "end",
+    "code", "vector_store", "agent", "end",
 ]

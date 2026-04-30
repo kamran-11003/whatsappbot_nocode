@@ -5,6 +5,7 @@ import { X, Play, Loader2, Trash2, Radio, Copy } from "lucide-react";
 import { api } from "@/lib/api";
 import { useRunStore, traceForNode, TraceEntry } from "@/lib/runStore";
 import CredentialsForm from "./CredentialsForm";
+import KbPanel from "./KbPanel";
 
 type Props = {
   botId: string;
@@ -388,11 +389,11 @@ function Panel({
   className?: string;
 }) {
   return (
-    <div className={`flex flex-col ${className}`}>
+    <div className={`flex flex-col min-h-0 ${className}`}>
       <div className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide px-3 py-2 border-b border-slate-800 bg-slate-950">
         {title}
       </div>
-      <div className="flex-1 overflow-y-auto p-3 flex flex-col">{children}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col">{children}</div>
     </div>
   );
 }
@@ -1091,6 +1092,131 @@ function ParameterFields({
           />
         </>
       );
+    case "vector_store":
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Retrieves the top-K most relevant chunks from this bot&apos;s knowledge
+            base and stores them in a variable so an <span className="text-violet-400">Agent</span>{" "}
+            (or any node) can use them.
+          </p>
+          <Label>Query (template)</Label>
+          <Input
+            value={d.query || ""}
+            onChange={(e: any) => set("query", e.target.value)}
+            placeholder="{{last_user_input}}"
+          />
+          <Label>Top-K results</Label>
+          <Input
+            type="number"
+            min={1}
+            max={20}
+            value={d.top_k ?? 4}
+            onChange={(e: any) => set("top_k", Number(e.target.value) || 1)}
+          />
+          <Label>Save context to variable</Label>
+          <Input
+            value={d.save_to || "kb_context"}
+            onChange={(e: any) => set("save_to", e.target.value)}
+            placeholder="kb_context"
+          />
+          <p className="text-[10px] text-slate-500 mt-2">
+            Output handles: <span className="text-emerald-400">hit</span> (≥1 chunk) /{" "}
+            <span className="text-red-400">miss</span> (0 chunks or error). Joined text in{" "}
+            <code className="text-emerald-400">{"{{" + (d.save_to || "kb_context") + "}}"}</code>;
+            structured chunks in{" "}
+            <code className="text-emerald-400">{"{{" + (d.save_to || "kb_context") + "_chunks}}"}</code>.
+          </p>
+          <KbPanel botId={botId} />
+        </>
+      );
+    case "agent":
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Calls an LLM with system instructions and (optionally) retrieved KB context.
+            Pair with a <span className="text-emerald-400">Vector Store</span> node upstream
+            for RAG. Uses the bot&apos;s LLM credentials by default — override per-node below.
+          </p>
+          <Label>Instructions (system prompt)</Label>
+          <Text
+            rows={5}
+            value={d.instructions || ""}
+            onChange={(e: any) => set("instructions", e.target.value)}
+            placeholder="You are a helpful WhatsApp assistant. Answer concisely."
+          />
+          <Label>User template</Label>
+          <Input
+            value={d.user_template || ""}
+            onChange={(e: any) => set("user_template", e.target.value)}
+            placeholder="{{last_user_input}}"
+          />
+          <Label>KB context variable (from Vector Store)</Label>
+          <Input
+            value={d.context_var || ""}
+            onChange={(e: any) => set("context_var", e.target.value)}
+            placeholder="kb_context"
+          />
+          <Label>Save answer to variable</Label>
+          <Input
+            value={d.save_to || ""}
+            onChange={(e: any) => set("save_to", e.target.value)}
+            placeholder="agent_response"
+          />
+          <Label>History turns to include</Label>
+          <Input
+            type="number"
+            min={0}
+            max={50}
+            value={d.history_turns ?? 10}
+            onChange={(e: any) => set("history_turns", Number(e.target.value) || 0)}
+          />
+          <label className="flex items-center gap-2 mt-3 text-xs text-slate-300">
+            <input
+              type="checkbox"
+              checked={d.send_reply !== false}
+              onChange={(e) => set("send_reply", e.target.checked)}
+            />
+            Send the answer to the user via WhatsApp
+          </label>
+          <div className="mt-4 border-t border-slate-800 pt-3">
+            <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-2">
+              Bot LLM credentials (used unless overridden below)
+            </div>
+            <CredentialsForm botId={botId} section="llm" />
+          </div>
+          <div className="mt-4 border-t border-slate-800 pt-3">
+            <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-2">
+              Per-node overrides (optional)
+            </div>
+            <Label>Provider</Label>
+            <select
+              value={d.provider || ""}
+              onChange={(e) => set("provider", e.target.value)}
+              className="w-full bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+            >
+              <option value="">(use bot default)</option>
+              <option value="gemini">Gemini</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+            <Label>Model</Label>
+            <Input
+              value={d.model || ""}
+              onChange={(e: any) => set("model", e.target.value)}
+              placeholder="(use bot default)"
+            />
+            <Label>API key</Label>
+            <input
+              type="password"
+              value={d.api_key || ""}
+              onChange={(e) => set("api_key", e.target.value)}
+              placeholder="(use bot default)"
+              className="w-full bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+            />
+          </div>
+        </>
+      );
     default:
       return <p className="text-xs text-slate-500">No parameters.</p>;
   }
@@ -1151,13 +1277,15 @@ function ParamList({
   );
 }
 
-/**
- * Unified WhatsApp reply field rendered for every node.
 const NO_REPLY_TYPES = new Set([
   "initialize", "condition", "loop", "end", "question", "validation",
   "media", "api_call", "set_variable", "template", "wait", "handover", "code",
+  "vector_store", "agent",
 ]);
 
+/**
+ * Unified WhatsApp reply field rendered for every node.
+ */
 function ReplyField({
   node,
   onChange,
