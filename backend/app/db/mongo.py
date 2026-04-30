@@ -44,6 +44,10 @@ def kb_files():
     return db()["kb_files"]
 
 
+def runs():
+    return db()["runs"]
+
+
 async def init_indexes():
     await threads().create_index([("bot_id", 1), ("contact_wa_id", 1)], unique=True)
     await messages().create_index([("thread_id", 1), ("created_at", 1)])
@@ -51,3 +55,4 @@ async def init_indexes():
     await credentials().create_index([("bot_id", 1)], unique=True)
     await credentials().create_index([("verify_token", 1)])
     await kb_files().create_index([("bot_id", 1)])
+    await runs().create_index([("bot_id", 1), ("started_at", -1)])

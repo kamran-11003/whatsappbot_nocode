@@ -1,6 +1,7 @@
 import json
 import httpx
 from app.executor.context import render
+from app.executor.run_context import is_dry_run
 
 
 async def api_call(node, ctx, creds, persist):
@@ -17,6 +18,11 @@ async def api_call(node, ctx, creds, persist):
             body = json.loads(body_raw)
         except Exception:
             body = body_raw
+
+    if is_dry_run():
+        ctx.variables[save_to] = {"_dry_run": True, "method": method, "url": url}
+        ctx.variables[f"{save_to}_status"] = 200
+        return {"next_handle": "success"}
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as c:

@@ -42,4 +42,28 @@ export const api = {
   },
   deleteKb: (botId: string, fileId: string) =>
     j<any>(`/api/bots/${botId}/kb/${fileId}`, { method: "DELETE" }),
+
+  // Runs
+  testRun: (
+    botId: string,
+    body: { contact_wa_id?: string; contact_name?: string; text: string; dry_run?: boolean }
+  ) => j<any>(`/api/bots/${botId}/test-run`, { method: "POST", body: JSON.stringify(body) }),
+  testNode: (
+    botId: string,
+    nodeId: string,
+    body: { input_vars?: Record<string, any>; contact_wa_id?: string; user_text?: string; dry_run?: boolean }
+  ) =>
+    j<any>(`/api/bots/${botId}/test-node/${nodeId}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  replay: (botId: string, messageId: string, dry_run = true) =>
+    j<any>(`/api/bots/${botId}/replay/${messageId}?dry_run=${dry_run}`, { method: "POST" }),
+  listenInbound: (botId: string, timeoutSec = 120) =>
+    j<{ status: "received" | "timeout"; payload?: any }>(
+      `/api/bots/${botId}/listen-inbound?timeout=${timeoutSec}`,
+      { method: "POST" }
+    ),
+  listRuns: (botId: string, limit = 50) => j<any[]>(`/api/bots/${botId}/runs?limit=${limit}`),
+  getRun: (botId: string, runId: string) => j<any>(`/api/bots/${botId}/runs/${runId}`),
 };

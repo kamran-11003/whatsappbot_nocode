@@ -1,9 +1,12 @@
 import httpx
+from app.executor.run_context import is_dry_run
 
 GRAPH_VERSION = "v20.0"
 
 
 async def send_text(phone_number_id: str, access_token: str, to: str, text: str) -> dict:
+    if is_dry_run():
+        return {"status": 200, "body": "<dry-run skipped>", "dry_run": True}
     url = f"https://graph.facebook.com/{GRAPH_VERSION}/{phone_number_id}/messages"
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     payload = {
@@ -18,6 +21,8 @@ async def send_text(phone_number_id: str, access_token: str, to: str, text: str)
 
 
 async def send_buttons(phone_number_id: str, access_token: str, to: str, text: str, buttons: list[str]) -> dict:
+    if is_dry_run():
+        return {"status": 200, "body": "<dry-run skipped>", "dry_run": True}
     url = f"https://graph.facebook.com/{GRAPH_VERSION}/{phone_number_id}/messages"
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     payload = {

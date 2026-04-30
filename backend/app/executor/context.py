@@ -1,7 +1,9 @@
 """Flow execution context. Variables + history live here."""
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
+
+from app.executor.run_context import RunContext
 
 
 @dataclass
@@ -14,6 +16,7 @@ class FlowContext:
     current_node: str | None = None
     awaiting_input: bool = False
     last_user_input: str = ""
+    run: Optional[RunContext] = None
 
     def to_dict(self) -> dict:
         return {
@@ -39,17 +42,45 @@ class FlowContext:
         )
 
 
-_VAR_PATTERN = re.compile(r"\{\{\s*([a-zA-Z0-9_\.]+)\s*\}\}")
+_VAR_PATTERN = re.compile(r"\{\{\s*([a-zA-Z0-9_\.\[\]]+)\s*\}\}")
+
+
+def _resolve_path(root: Any, path: str) -> Any:
+    """Walk a dotted (or bracketed) path through nested dicts/lists.
+    `a.b.c` and `a[0].b` both supported."""
+    cur: Any = root
+    # Normalize bracket notation into dots: a[0].b -> a.0.b
+    norm = re.sub(r"\[(\d+)\]", r".\1", path)
+    for part in norm.split("."):
+        if part == "":
+            continue
+        if isinstance(cur, dict):
+            cur = cur.get(part)
+        elif isinstance(cur, list):
+            try:
+                cur = cur[int(part)]
+            except (ValueError, IndexError):
+                return ""
+        else:
+            return ""
+        if cur is None:
+            return ""
+    return cur
 
 
 def render(template: str, ctx: FlowContext) -> str:
-    """Replace {{var}} placeholders from variables."""
+    """Replace {{var}} / {{a.b.c}} placeholders from ctx.variables."""
     if not isinstance(template, str):
         return template
 
     def repl(m):
         key = m.group(1)
-        val = ctx.variables.get(key, "")
+        val = _resolve_path(ctx.variables, key)
+        if val is None or val == "":
+            return ""
+        if isinstance(val, (dict, list)):
+            import json as _json
+            return _json.dumps(val)
         return str(val)
 
     return _VAR_PATTERN.sub(repl, template)

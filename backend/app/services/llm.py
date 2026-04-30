@@ -1,8 +1,11 @@
 """Provider-agnostic LLM caller. BYOK per bot."""
 import httpx
+from app.executor.run_context import is_dry_run
 
 
 async def chat(provider: str, model: str, api_key: str, system: str, user: str, history: list[dict] | None = None) -> str:
+    if is_dry_run():
+        return f"[dry-run mock {provider}/{model} reply to: {user[:80]}]"
     history = history or []
     if provider == "gemini":
         return await _gemini(model, api_key, system, user, history)

@@ -1,8 +1,9 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
+  MiniMap,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
@@ -16,27 +17,55 @@ import ReactFlow, {
 } from "reactflow";
 import { api } from "@/lib/api";
 import NodePalette, { NODE_DEFS } from "./NodePalette";
-import PropertiesPanel from "./PropertiesPanel";
+import NodeDetailView from "./NodeDetailView";
+import Toolbar from "./Toolbar";
+import BottomDrawer from "./BottomDrawer";
 import { customNodeTypes } from "./nodes";
+import { useRunStore } from "@/lib/runStore";
 
-function Builder({ botId }: { botId: string }) {
+function Builder({ botId, botName }: { botId: string; botName: string }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const [selected, setSelected] = useState<Node | null>(null);
+  const [openNode, setOpenNode] = useState<Node | null>(null);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const dirty = useRunStore((s) => s.dirty);
+  const setDirty = useRunStore((s) => s.setDirty);
+  const setRunning = useRunStore((s) => s.setRunning);
+  const setResult = useRunStore((s) => s.setResult);
+  const openDrawer = useRunStore((s) => s.openDrawer);
   const { screenToFlowPosition } = useReactFlow();
+  const initial = useRef(false);
 
+  // Load flow on bot change
   useEffect(() => {
+    initial.current = false;
     (async () => {
       const flow = await api.getFlow(botId);
       setNodes(flow.nodes || []);
       setEdges(flow.edges || []);
+      setDirty(false);
+      initial.current = true;
     })();
-  }, [botId]);
+  }, [botId, setDirty]);
 
-  const onNodesChange = useCallback((c: NodeChange[]) => setNodes((n) => applyNodeChanges(c, n)), []);
-  const onEdgesChange = useCallback((c: EdgeChange[]) => setEdges((e) => applyEdgeChanges(c, e)), []);
-  const onConnect = useCallback((c: Connection) => setEdges((e) => addEdge({ ...c, animated: true }, e)), []);
+  // Mark dirty on changes (skip first load)
+  useEffect(() => {
+    if (initial.current) setDirty(true);
+  }, [nodes, edges, setDirty]);
+
+  const onNodesChange = useCallback(
+    (c: NodeChange[]) => setNodes((n) => applyNodeChanges(c, n)),
+    []
+  );
+  const onEdgesChange = useCallback(
+    (c: EdgeChange[]) => setEdges((e) => applyEdgeChanges(c, e)),
+    []
+  );
+  const onConnect = useCallback(
+    (c: Connection) => setEdges((e) => addEdge({ ...c, animated: true }, e)),
+    []
+  );
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -63,66 +92,212 @@ function Builder({ botId }: { botId: string }) {
     e.dataTransfer.dropEffect = "move";
   }, []);
 
-  const updateSelected = (data: any) => {
-    if (!selected) return;
-    setNodes((nds) =>
-      nds.map((n) => (n.id === selected.id ? { ...n, data: { ...n.data, ...data } } : n))
-    );
-    setSelected({ ...selected, data: { ...selected.data, ...data } });
-  };
+  const updateNodeData = useCallback(
+    (nodeId: string, data: any) => {
+      setNodes((nds) =>
+        nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, ...data } } : n))
+      );
+      setOpenNode((cur) =>
+        cur && cur.id === nodeId ? { ...cur, data: { ...cur.data, ...data } } : cur
+      );
+    },
+    []
+  );
 
-  const handleSave = async () => {
-    await api.saveFlow(botId, { nodes, edges, variables: {}, published: true });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  };
+  const deleteNode = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, []);
 
-  const handleDeleteSelected = () => {
-    if (!selected) return;
-    if (selected.type === "initialize") return;
-    setNodes((nds) => nds.filter((n) => n.id !== selected.id));
-    setEdges((eds) => eds.filter((e) => e.source !== selected.id && e.target !== selected.id));
-    setSelected(null);
-  };
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    try {
+      await api.saveFlow(botId, { nodes, edges, variables: {}, published: true });
+      setSaved(true);
+      setDirty(false);
+      setTimeout(() => setSaved(false), 1500);
+    } finally {
+      setSaving(false);
+    }
+  }, [botId, nodes, edges, setDirty]);
+
+  // Execute full workflow: wait for the next real WhatsApp message, then
+  // re-run the flow from the UI (dry_run) to populate the trace. The worker
+  // handles the actual outbound reply via the queue, so we don't double-send.
+  const handleExecute = useCallback(
+    async () => {
+      if (dirty) {
+        await api.saveFlow(botId, { nodes, edges, variables: {}, published: true });
+        setDirty(false);
+      }
+      setRunning();
+      openDrawer("logs");
+      try {
+        const listen = await api.listenInbound(botId, 180);
+        if (listen.status !== "received" || !listen.payload) {
+          setResult({
+            trace: [
+              { node_id: "", type: "", status: "error", error: "Timed out waiting for WhatsApp message" },
+            ] as any,
+            status: "error",
+          });
+          return;
+        }
+        const p = listen.payload;
+        // Cache + broadcast to any open NodeDetailView so its Input/Output
+        // panels show the freshly received payload instead of stale data.
+        if (typeof window !== "undefined") {
+          localStorage.setItem(`wm:last_inbound:${botId}`, JSON.stringify(p));
+          window.dispatchEvent(
+            new CustomEvent("wm:inbound-received", {
+              detail: { botId, payload: p },
+            })
+          );
+        }
+        const text =
+          p.message?.text?.body ??
+          p.message?.button?.text ??
+          p.message?.interactive?.button_reply?.title ??
+          "";
+        // dry_run:true so we don't send a second WhatsApp message
+        // (the worker already sent the real one).
+        const res = await api.testRun(botId, {
+          text,
+          contact_wa_id: p.contact_wa_id,
+          contact_name: p.contact_name,
+          dry_run: true,
+        });
+        setResult({
+          run_id: res.run_id,
+          trace: res.trace || [],
+          status: res.status,
+          variables: res.variables,
+        });
+      } catch (e: any) {
+        setResult({
+          trace: [{ node_id: "", type: "", status: "error", error: String(e) }] as any,
+          status: "error",
+        });
+      }
+    },
+    [botId, nodes, edges, dirty, setDirty, setRunning, setResult, openDrawer]
+  );
+
+  // Listen to per-node hover toolbar events
+  useEffect(() => {
+    const onExec = async (e: any) => {
+      const id = e.detail.id;
+      const node = nodes.find((n) => n.id === id);
+      if (node) setOpenNode(node);
+    };
+    const onDel = (e: any) => deleteNode(e.detail.id);
+    const onToggle = (e: any) => {
+      const id = e.detail.id;
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, disabled: !n.data?.disabled } } : n
+        )
+      );
+    };
+    window.addEventListener("wm:exec-node", onExec);
+    window.addEventListener("wm:delete-node", onDel);
+    window.addEventListener("wm:toggle-disable", onToggle);
+    return () => {
+      window.removeEventListener("wm:exec-node", onExec);
+      window.removeEventListener("wm:delete-node", onDel);
+      window.removeEventListener("wm:toggle-disable", onToggle);
+    };
+  }, [nodes, deleteNode]);
+
+  // Keyboard: Cmd/Ctrl-S to save, Cmd/Ctrl-Enter to execute
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        handleSave();
+      } else if (meta && e.key === "Enter") {
+        e.preventDefault();
+        handleExecute();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleSave, handleExecute]);
+
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (dirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
 
   return (
-    <div className="h-full flex">
-      <NodePalette />
-      <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeClick={(_, n) => setSelected(n)}
-          onPaneClick={() => setSelected(null)}
-          nodeTypes={customNodeTypes}
-          fitView
-        >
-          <Background color="#334155" />
-          <Controls />
-        </ReactFlow>
-        <button
-          onClick={handleSave}
-          className="absolute top-3 right-3 bg-emerald-600 hover:bg-emerald-700 px-4 py-2 rounded text-sm shadow-lg z-10"
-        >
-          {saved ? "Saved ✓" : "Save & Publish"}
-        </button>
-      </div>
-      <PropertiesPanel
-        node={selected}
-        onChange={updateSelected}
-        onDelete={handleDeleteSelected}
+    <div className="h-full flex flex-col">
+      <Toolbar
+        botName={botName}
+        saving={saving}
+        saved={saved}
+        dirty={dirty}
+        onSave={handleSave}
+        onExecute={handleExecute}
       />
+      <div className="flex-1 flex relative overflow-hidden">
+        <NodePalette />
+        <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeDoubleClick={(_, n) => setOpenNode(n)}
+            nodeTypes={customNodeTypes}
+            fitView
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background color="#334155" gap={16} />
+            <Controls className="!bg-slate-800 !border-slate-700" />
+            <MiniMap
+              maskColor="rgba(15,23,42,0.7)"
+              style={{ background: "#0f172a" }}
+              nodeColor={(n) => {
+                const def = NODE_DEFS.find((d) => d.type === n.type);
+                return def
+                  ? def.color.replace("bg-", "").replace("-600", "")
+                  : "#334155";
+              }}
+            />
+          </ReactFlow>
+          <BottomDrawer botId={botId} />
+        </div>
+      </div>
+      {openNode && (
+        <NodeDetailView
+          botId={botId}
+          node={openNode}
+          onChange={(d) => updateNodeData(openNode.id, d)}
+          onClose={() => setOpenNode(null)}
+          onDelete={() => deleteNode(openNode.id)}
+          ensureSaved={async () => {
+            await api.saveFlow(botId, { nodes, edges, variables: {}, published: true });
+            setDirty(false);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-export default function FlowBuilder({ botId }: { botId: string }) {
+export default function FlowBuilder({ botId, botName }: { botId: string; botName: string }) {
   return (
     <ReactFlowProvider>
-      <Builder botId={botId} />
+      <Builder botId={botId} botName={botName} />
     </ReactFlowProvider>
   );
 }
