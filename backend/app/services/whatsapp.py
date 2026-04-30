@@ -296,6 +296,9 @@ async def send_location(phone_number_id: str, access_token: str, to: str,
     })
 
 
+# ---------- additional outbound (location request + templates) ----------
+
+
 async def request_location(phone_number_id: str, access_token: str, to: str,
                            body_text: str) -> dict:
     """Send an interactive ``location_request_message`` so the user can tap to
@@ -310,6 +313,28 @@ async def request_location(phone_number_id: str, access_token: str, to: str,
             "action": {"name": "send_location"},
         },
     })
+
+
+async def send_template(phone_number_id: str, access_token: str, to: str,
+                        template_name: str, language: str = "en_US",
+                        components: list[dict] | None = None) -> dict:
+    """Send a pre-approved WhatsApp template message.
+
+    ``components`` follows the Cloud API shape:
+      [{"type":"body","parameters":[{"type":"text","text":"..."}]}, ...]
+    """
+    payload: dict = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": language or "en_US"},
+        },
+    }
+    if components:
+        payload["template"]["components"] = components
+    return await _post_message(phone_number_id, access_token, payload)
 
 
 # ---------- inbound media download ----------

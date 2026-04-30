@@ -21,7 +21,10 @@ from app.services.whatsapp import send_text
 
 # Node types that should never emit a follow-up WhatsApp reply, even if a
 # `data.reply` template is set on them. Control-flow / boundary nodes only.
-_NO_REPLY_NODE_TYPES = {"initialize", "condition", "loop", "end", "question", "validation", "media", "api_call"}
+_NO_REPLY_NODE_TYPES = {
+    "initialize", "condition", "loop", "end", "question", "validation",
+    "media", "api_call", "set_variable", "template", "wait", "handover", "code",
+}
 
 
 def _index_flow(flow: dict) -> tuple[dict[str, dict], dict[str, list[tuple[str, str]]]]:

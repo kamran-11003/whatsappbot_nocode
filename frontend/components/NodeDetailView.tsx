@@ -838,19 +838,325 @@ function ParameterFields({
         </>
       );
     }
+    case "set_variable": {
+      const rows = (d.assignments && d.assignments.length ? d.assignments : [{ name: "", value: "" }]) as any[];
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Assigns one or more variables. Values support{" "}
+            <code className="text-emerald-400">{"{{templates}}"}</code> and are auto-coerced
+            (numbers, booleans, JSON objects/arrays).
+          </p>
+          <div className="space-y-1 mt-2">
+            {rows.map((row, i) => (
+              <div key={i} className="border border-slate-800 rounded p-2 bg-slate-950 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500">Assignment {i + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = [...rows];
+                      next.splice(i, 1);
+                      set("assignments", next.length ? next : [{ name: "", value: "" }]);
+                    }}
+                    className="text-[10px] text-red-400 hover:text-red-300"
+                  >
+                    remove
+                  </button>
+                </div>
+                <Input
+                  value={row.name || ""}
+                  onChange={(e: any) => {
+                    const next = [...rows];
+                    next[i] = { ...next[i], name: e.target.value };
+                    set("assignments", next);
+                  }}
+                  placeholder="variable name (e.g. total)"
+                />
+                <Input
+                  value={row.value || ""}
+                  onChange={(e: any) => {
+                    const next = [...rows];
+                    next[i] = { ...next[i], value: e.target.value };
+                    set("assignments", next);
+                  }}
+                  placeholder='value (e.g. {"x":1} or {{name}})'
+                />
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => set("assignments", [...rows, { name: "", value: "" }])}
+            className="mt-2 text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded"
+          >
+            + Add assignment
+          </button>
+        </>
+      );
+    }
+    case "template": {
+      const bodyParams = (d.body_params || []) as string[];
+      const headerParams = (d.header_params || []) as string[];
+      const buttonParams = (d.button_params || []) as any[];
+      const headerKind = (d.header_kind as string) || "none";
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Sends a pre-approved WhatsApp template message — required for messaging users
+            outside the 24-hour customer-service window.
+          </p>
+          <Label>Template name</Label>
+          <Input
+            value={d.template_name || ""}
+            onChange={(e: any) => set("template_name", e.target.value)}
+            placeholder="hello_world"
+          />
+          <Label>Language code</Label>
+          <Input
+            value={d.language || ""}
+            onChange={(e: any) => set("language", e.target.value)}
+            placeholder="en_US"
+          />
+          <Label>Header kind</Label>
+          <select
+            value={headerKind}
+            onChange={(e) => set("header_kind", e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+          >
+            <option value="none">None</option>
+            <option value="text">Text</option>
+            <option value="image">Image</option>
+            <option value="video">Video</option>
+            <option value="document">Document</option>
+          </select>
+          {headerKind === "text" && (
+            <ParamList
+              label="Header text params"
+              items={headerParams}
+              onChange={(v) => set("header_params", v)}
+              placeholder="value for {{1}}"
+            />
+          )}
+          {["image", "video", "document"].includes(headerKind) && (
+            <>
+              <Label>Header media (URL or media id)</Label>
+              <Input
+                value={d.header_media || ""}
+                onChange={(e: any) => set("header_media", e.target.value)}
+                placeholder="https://example.com/file.jpg"
+              />
+            </>
+          )}
+          <ParamList
+            label="Body params (in order: {{1}}, {{2}}, ...)"
+            items={bodyParams}
+            onChange={(v) => set("body_params", v)}
+            placeholder="value for {{1}}"
+          />
+          <Label>Button params (optional)</Label>
+          <div className="space-y-1">
+            {buttonParams.map((b, i) => (
+              <div key={i} className="border border-slate-800 rounded p-2 bg-slate-950 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500">Button {i + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = [...buttonParams];
+                      next.splice(i, 1);
+                      set("button_params", next);
+                    }}
+                    className="text-[10px] text-red-400 hover:text-red-300"
+                  >
+                    remove
+                  </button>
+                </div>
+                <div className="flex gap-1">
+                  <Input
+                    value={b.index ?? 0}
+                    onChange={(e: any) => {
+                      const next = [...buttonParams];
+                      next[i] = { ...next[i], index: Number(e.target.value) || 0 };
+                      set("button_params", next);
+                    }}
+                    placeholder="index"
+                    className="w-16"
+                  />
+                  <select
+                    value={b.sub_type || "url"}
+                    onChange={(e) => {
+                      const next = [...buttonParams];
+                      next[i] = { ...next[i], sub_type: e.target.value };
+                      set("button_params", next);
+                    }}
+                    className="bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+                  >
+                    <option value="url">url</option>
+                    <option value="quick_reply">quick_reply</option>
+                  </select>
+                </div>
+                <Input
+                  value={b.value || ""}
+                  onChange={(e: any) => {
+                    const next = [...buttonParams];
+                    next[i] = { ...next[i], value: e.target.value };
+                    set("button_params", next);
+                  }}
+                  placeholder="value (URL suffix or payload)"
+                />
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => set("button_params", [...buttonParams, { index: 0, sub_type: "url", value: "" }])}
+              className="text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded"
+            >
+              + Add button param
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-500 mt-2">
+            Output handles: <span className="text-emerald-400">success</span> /{" "}
+            <span className="text-red-400">error</span>.
+          </p>
+        </>
+      );
+    }
+    case "wait":
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Pauses the flow for N seconds (max 30s in-process). For longer delays use a
+            scheduled trigger.
+          </p>
+          <Label>Seconds</Label>
+          <Input
+            type="number"
+            min={0}
+            max={30}
+            value={d.seconds ?? 1}
+            onChange={(e: any) => set("seconds", Number(e.target.value) || 0)}
+          />
+        </>
+      );
+    case "loop":
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Iterates a counter <em>times</em> times. The <span className="text-emerald-400">body</span>{" "}
+            handle re-enters the loop; <span className="text-emerald-400">out</span> fires when done.
+          </p>
+          <Label>Counter variable</Label>
+          <Input
+            value={d.counter || "_loop_i"}
+            onChange={(e: any) => set("counter", e.target.value)}
+            placeholder="_loop_i"
+          />
+          <Label>Times</Label>
+          <Input
+            type="number"
+            min={1}
+            value={d.times ?? 3}
+            onChange={(e: any) => set("times", Number(e.target.value) || 1)}
+          />
+          <p className="text-[10px] text-slate-500 mt-2">
+            Use <code className="text-emerald-400">{"{{" + (d.counter || "_loop_i") + "}}"}</code>{" "}
+            inside the loop body.
+          </p>
+        </>
+      );
+    case "handover":
+      return (
+        <p className="text-xs text-slate-400">
+          Marks this thread as handed over to a human. The bot stops responding to this
+          contact until the <em>handover</em> flag is cleared on the thread (via the
+          Threads view).
+        </p>
+      );
+    case "code":
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Run a sandboxed Python snippet (RestrictedPython). Read flow variables via{" "}
+            <code className="text-emerald-400">vars[&quot;name&quot;]</code> and assign new
+            ones the same way. Errors are stored in{" "}
+            <code className="text-emerald-400">{"{{_code_error}}"}</code>.
+          </p>
+          <Label>Code</Label>
+          <Text
+            rows={10}
+            value={d.code || ""}
+            onChange={(e: any) => set("code", e.target.value)}
+            placeholder={'name = vars.get("name", "")\nvars["greeting"] = f"Hi {name}!"'}
+          />
+        </>
+      );
     default:
       return <p className="text-xs text-slate-500">No parameters.</p>;
   }
 }
 
 /**
- * Unified WhatsApp reply field rendered for every node. If non-empty, the
- * engine sends this text via WhatsApp after the node's logic runs. Supports
- * {{var}} templating against the flow's variables.
- *
- * Hidden for control-only nodes that don't make sense as a reply source.
+ * Editable list of strings — used by Template node for body/header param lists.
  */
-const NO_REPLY_TYPES = new Set(["initialize", "condition", "loop", "end", "question", "validation", "media", "api_call"]);
+function ParamList({
+  label,
+  items,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  items: string[];
+  onChange: (next: string[]) => void;
+  placeholder?: string;
+}) {
+  return (
+    <>
+      <label className="text-xs text-slate-400 block mt-2 mb-1">{label}</label>
+      <div className="space-y-1">
+        {items.map((v, i) => (
+          <div key={i} className="flex gap-1">
+            <input
+              value={v}
+              onChange={(e) => {
+                const next = [...items];
+                next[i] = e.target.value;
+                onChange(next);
+              }}
+              placeholder={placeholder}
+              className="flex-1 bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const next = [...items];
+                next.splice(i, 1);
+                onChange(next);
+              }}
+              className="text-[10px] text-red-400 hover:text-red-300 px-2"
+            >
+              remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange([...items, ""])}
+        className="mt-1 text-xs bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded"
+      >
+        + Add
+      </button>
+    </>
+  );
+}
+
+/**
+ * Unified WhatsApp reply field rendered for every node.
+const NO_REPLY_TYPES = new Set([
+  "initialize", "condition", "loop", "end", "question", "validation",
+  "media", "api_call", "set_variable", "template", "wait", "handover", "code",
+]);
 
 function ReplyField({
   node,

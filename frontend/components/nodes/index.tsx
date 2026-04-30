@@ -129,4 +129,10 @@ export const customNodeTypes = {
   validation: nodeFor("validation", ["ok", "fail"]),
   media: nodeFor("media"),
   api_call: nodeFor("api_call", ["success", "error"]),
+  set_variable: nodeFor("set_variable"),
+  template: nodeFor("template", ["success", "error"]),
+  wait: nodeFor("wait"),
+  loop: nodeFor("loop", ["body", "out"]),
+  handover: nodeFor("handover", []),
+  code: nodeFor("code"),
 };
