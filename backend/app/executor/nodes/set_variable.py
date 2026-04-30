@@ -28,19 +28,24 @@ def _coerce(s: str):
         return False
     if low in ("null", "none"):
         return None
-    # int / float
-    try:
-        if t.lstrip("-").isdigit():
-            return int(t)
-        return float(t) if any(c in t for c in ".eE") and t.replace(".", "", 1).lstrip("-").isdigit() else s
-    except ValueError:
-        pass
-    # JSON
+    # JSON object/array first (so {"a":1} doesn't get treated as string)
     if (t.startswith("{") and t.endswith("}")) or (t.startswith("[") and t.endswith("]")):
         try:
             return json.loads(t)
         except Exception:
             return s
+    # int
+    if t.lstrip("-").isdigit():
+        try:
+            return int(t)
+        except ValueError:
+            pass
+    # float
+    try:
+        if any(c in t for c in ".eE"):
+            return float(t)
+    except ValueError:
+        pass
     return s
 
 
