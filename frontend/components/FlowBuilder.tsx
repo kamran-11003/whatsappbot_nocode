@@ -24,6 +24,57 @@ import AssistantPanel from "./AssistantPanel";
 import { customNodeTypes } from "./nodes";
 import { useRunStore } from "@/lib/runStore";
 
+/** Approx Tailwind palette → hex for the minimap node dots. */
+const TW_HEX: Record<string, string> = {
+  "bg-blue-600": "2563eb", "bg-yellow-600": "ca8a04", "bg-purple-600": "9333ea",
+  "bg-rose-600": "e11d48", "bg-teal-600": "0d9488", "bg-indigo-600": "4f46e5",
+  "bg-amber-600": "d97706", "bg-cyan-700": "0e7490", "bg-slate-600": "475569",
+  "bg-fuchsia-600": "c026d3", "bg-orange-600": "ea580c", "bg-zinc-700": "3f3f46",
+  "bg-emerald-700": "047857", "bg-violet-700": "6d28d9",
+};
+function tailwindToHex(c: string): string {
+  return TW_HEX[c] || "475569";
+}
+
+/** Lay out a flow left-to-right by walking edges from `initialize`. */
+function autoLayoutHorizontal(nodes: Node[], edges: Edge[]): Node[] {
+  if (!nodes.length) return nodes;
+  const COL = 260;
+  const ROW = 140;
+  const adj = new Map<string, string[]>();
+  for (const e of edges) {
+    if (!adj.has(e.source)) adj.set(e.source, []);
+    adj.get(e.source)!.push(e.target);
+  }
+  const depth = new Map<string, number>();
+  const start = nodes.find((n) => n.type === "initialize") || nodes[0];
+  const queue: Array<[string, number]> = [[start.id, 0]];
+  while (queue.length) {
+    const [id, d] = queue.shift()!;
+    if (depth.has(id) && depth.get(id)! >= d) continue;
+    depth.set(id, d);
+    for (const nx of adj.get(id) || []) queue.push([nx, d + 1]);
+  }
+  // Anything unreachable goes after the deepest column.
+  const maxDepth = Math.max(0, ...Array.from(depth.values()));
+  let orphanCol = maxDepth + 1;
+  for (const n of nodes) if (!depth.has(n.id)) depth.set(n.id, orphanCol++);
+  // Group by column to compute row positions.
+  const cols = new Map<number, string[]>();
+  for (const n of nodes) {
+    const d = depth.get(n.id)!;
+    if (!cols.has(d)) cols.set(d, []);
+    cols.get(d)!.push(n.id);
+  }
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const [d, ids] of cols) {
+    ids.forEach((id, i) => {
+      positions.set(id, { x: 80 + d * COL, y: 100 + i * ROW });
+    });
+  }
+  return nodes.map((n) => ({ ...n, position: positions.get(n.id) || n.position }));
+}
+
 function Builder({ botId, botName }: { botId: string; botName: string }) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -44,8 +95,18 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
     initial.current = false;
     (async () => {
       const flow = await api.getFlow(botId);
-      setNodes(flow.nodes || []);
-      setEdges(flow.edges || []);
+      const loadedNodes: Node[] = flow.nodes || [];
+      const loadedEdges: Edge[] = flow.edges || [];
+      // If the saved layout looks vertical (columns are narrow but rows tall),
+      // auto-rewrite it to horizontal so legacy flows look right with the new
+      // left/right handles.
+      const xs = loadedNodes.map((n) => n.position?.x ?? 0);
+      const ys = loadedNodes.map((n) => n.position?.y ?? 0);
+      const xRange = Math.max(...xs, 0) - Math.min(...xs, 0);
+      const yRange = Math.max(...ys, 0) - Math.min(...ys, 0);
+      const looksVertical = loadedNodes.length > 2 && yRange > xRange * 1.4;
+      setNodes(looksVertical ? autoLayoutHorizontal(loadedNodes, loadedEdges) : loadedNodes);
+      setEdges(loadedEdges.map((e) => ({ ...e, type: e.type || "smoothstep", animated: e.animated ?? true })));
       setDirty(false);
       initial.current = true;
     })();
@@ -65,7 +126,7 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
     []
   );
   const onConnect = useCallback(
-    (c: Connection) => setEdges((e) => addEdge({ ...c, animated: true }, e)),
+    (c: Connection) => setEdges((e) => addEdge({ ...c, animated: true, type: "smoothstep" }, e)),
     []
   );
 
@@ -123,6 +184,11 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
     }
   }, [botId, nodes, edges, setDirty]);
 
+  const handleAutoLayout = useCallback(() => {
+    setNodes((nds) => autoLayoutHorizontal(nds, edges));
+    setDirty(true);
+  }, [edges, setDirty]);
+
   const handleExport = useCallback(() => {
     const payload = { nodes, edges, variables: {}, exported_at: new Date().toISOString(), bot_name: botName };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -171,8 +237,13 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
         position: n.position || { x: 100 + (i % 5) * 240, y: 100 + Math.floor(i / 5) * 160 },
         data: n.data || {},
       }));
-      setNodes(nodes);
-      setEdges(next.edges.map((e) => ({ ...e, animated: e.animated ?? true })));
+      const edges = next.edges.map((e) => ({
+        ...e,
+        type: e.type || "smoothstep",
+        animated: e.animated ?? true,
+      }));
+      setNodes(autoLayoutHorizontal(nodes, edges));
+      setEdges(edges);
       setDirty(true);
     },
     [setDirty],
@@ -305,6 +376,7 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
         onExecute={handleExecute}
         onExport={handleExport}
         onImport={handleImport}
+        onAutoLayout={handleAutoLayout}
         onToggleAssistant={() => setAssistantOpen((v) => !v)}
         assistantOpen={assistantOpen}
       />
@@ -319,20 +391,29 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
             onConnect={onConnect}
             onNodeDoubleClick={(_, n) => setOpenNode(n)}
             nodeTypes={customNodeTypes}
+            defaultEdgeOptions={{
+              type: "smoothstep",
+              animated: true,
+              style: { stroke: "#a78bfa", strokeWidth: 2 },
+            }}
+            connectionLineStyle={{ stroke: "#a78bfa", strokeWidth: 2 }}
+            connectionRadius={28}
             fitView
+            fitViewOptions={{ padding: 0.25 }}
             proOptions={{ hideAttribution: true }}
           >
-            <Background color="#334155" gap={16} />
-            <Controls className="!bg-slate-800 !border-slate-700" />
+            <Background color="#1e293b" gap={20} size={1.5} />
+            <Controls className="!bg-slate-900 !border !border-slate-700 !rounded-lg overflow-hidden [&>button]:!bg-slate-900 [&>button]:!border-slate-700 [&>button]:!text-slate-200 [&>button:hover]:!bg-slate-800" />
             <MiniMap
-              maskColor="rgba(15,23,42,0.7)"
-              style={{ background: "#0f172a" }}
+              maskColor="rgba(2,6,23,0.85)"
+              style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8 }}
               nodeColor={(n) => {
                 const def = NODE_DEFS.find((d) => d.type === n.type);
-                return def
-                  ? def.color.replace("bg-", "").replace("-600", "")
-                  : "#334155";
+                return def ? "#" + tailwindToHex(def.color) : "#475569";
               }}
+              nodeStrokeWidth={2}
+              pannable
+              zoomable
             />
           </ReactFlow>
           <BottomDrawer botId={botId} />

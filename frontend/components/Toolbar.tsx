@@ -11,6 +11,7 @@ import {
   Download,
   Upload,
   Sparkles,
+  LayoutGrid,
 } from "lucide-react";
 import { useRunStore } from "@/lib/runStore";
 
@@ -23,6 +24,7 @@ export default function Toolbar({
   onExecute,
   onExport,
   onImport,
+  onAutoLayout,
   onToggleAssistant,
   assistantOpen,
 }: {
@@ -34,6 +36,7 @@ export default function Toolbar({
   onExecute: () => void;
   onExport: () => void;
   onImport: () => void;
+  onAutoLayout: () => void;
   onToggleAssistant: () => void;
   assistantOpen: boolean;
 }) {
@@ -117,6 +120,13 @@ export default function Toolbar({
 
       <div className="w-px h-6 bg-slate-700 mx-1" />
 
+      <button
+        onClick={onAutoLayout}
+        className="px-2.5 py-1.5 rounded text-xs flex items-center gap-1.5 text-slate-300 hover:bg-slate-800"
+        title="Auto-arrange nodes left-to-right"
+      >
+        <LayoutGrid size={13} /> Layout
+      </button>
       <button
         onClick={onImport}
         className="px-2.5 py-1.5 rounded text-xs flex items-center gap-1.5 text-slate-300 hover:bg-slate-800"
