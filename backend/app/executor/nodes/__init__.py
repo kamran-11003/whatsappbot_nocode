@@ -10,6 +10,8 @@ from app.executor.nodes.reply import reply
 from app.executor.nodes.condition import condition
 from app.executor.nodes.question import question
 from app.executor.nodes.validation import validation
+from app.executor.nodes.media import media
+from app.executor.nodes.api_call import api_call
 from app.executor.nodes.end import end
 
-__all__ = ["initialize", "reply", "condition", "question", "validation", "end"]
+__all__ = ["initialize", "reply", "condition", "question", "validation", "media", "api_call", "end"]

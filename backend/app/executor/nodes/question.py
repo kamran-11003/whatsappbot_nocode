@@ -1,5 +1,5 @@
 from app.executor.context import render
-from app.services.whatsapp import send_text, send_buttons, send_list
+from app.services.whatsapp import send_text, send_buttons, send_list, request_location
 
 
 async def question(node, ctx, creds, persist):
@@ -8,7 +8,10 @@ async def question(node, ctx, creds, persist):
     data fields:
       prompt:     str (template) — message body sent to the user
       variable:   str — name of variable to store the user's reply in
-      input_type: "text" | "buttons" | "list"  (default "text")
+      input_type: "text" | "buttons" | "list" | "location" | "media"
+                  (location → sends a location_request interactive message;
+                   media    → just sends the prompt and waits for any
+                              image/video/audio/document/sticker reply)
       buttons:    list[str] (max 3, used when input_type="buttons")
       list_button:str — label of the WhatsApp list trigger button
       list_rows:  list[{title, description?}] (max 10) for input_type="list"
@@ -51,7 +54,10 @@ async def question(node, ctx, creds, persist):
             )
         else:
             await send_text(pn, tok, ctx.contact_wa_id, prompt)
+    elif input_type == "location":
+        await request_location(pn, tok, ctx.contact_wa_id, prompt)
     else:
+        # "text" and "media" both just send the prompt as plain text and pause.
         await send_text(pn, tok, ctx.contact_wa_id, prompt)
 
     ctx.history.append({"role": "assistant", "content": prompt})

@@ -21,7 +21,7 @@ from app.services.whatsapp import send_text
 
 # Node types that should never emit a follow-up WhatsApp reply, even if a
 # `data.reply` template is set on them. Control-flow / boundary nodes only.
-_NO_REPLY_NODE_TYPES = {"initialize", "condition", "loop", "end", "question", "validation"}
+_NO_REPLY_NODE_TYPES = {"initialize", "condition", "loop", "end", "question", "validation", "media", "api_call"}
 
 
 def _index_flow(flow: dict) -> tuple[dict[str, dict], dict[str, list[tuple[str, str]]]]:
@@ -301,9 +301,18 @@ async def run_flow(
             "last_user_input": user_text,
         }
         if inbound_payload:
-            seed["message"] = inbound_payload.get("message", {})
+            msg = inbound_payload.get("message", {}) or {}
+            seed["message"] = msg
             seed["received_at"] = inbound_payload.get("received_at", "")
             seed["payload"] = inbound_payload
+            # Flatten typed inbound payload (media_id, latitude, contact_phones,
+            # etc.) into top-level variables so flows can use {{media_id}} etc.
+            try:
+                from app.services.whatsapp import extract_user_payload
+                for k, v in extract_user_payload(msg).items():
+                    seed[k] = v
+            except Exception:
+                pass
         for k, v in seed.items():
             ctx.variables[k] = v
 
@@ -313,8 +322,28 @@ async def run_flow(
         if ctx.awaiting_input and ctx.current_node:
             node = nodes_by_id.get(ctx.current_node)
             if node and node.get("type") == "question":
-                var = (node.get("data") or {}).get("variable") or "answer"
-                ctx.variables[var] = user_text
+                qdata = node.get("data") or {}
+                var = qdata.get("variable") or "answer"
+                qkind = (qdata.get("input_type") or "text").lower()
+                # For media/location/any input types, store a structured value
+                # so {{<var>}} renders meaningfully and downstream nodes get
+                # access to media_id / lat,lng / etc.
+                if qkind == "location" and ctx.variables.get("kind") == "location":
+                    lat = ctx.variables.get("latitude")
+                    lng = ctx.variables.get("longitude")
+                    ctx.variables[var] = f"{lat},{lng}"
+                    ctx.variables[f"{var}_latitude"] = lat
+                    ctx.variables[f"{var}_longitude"] = lng
+                    ctx.variables[f"{var}_name"] = ctx.variables.get("name", "")
+                    ctx.variables[f"{var}_address"] = ctx.variables.get("address", "")
+                elif qkind in ("media", "image", "video", "audio", "document") and ctx.variables.get("media_id"):
+                    ctx.variables[var] = ctx.variables.get("media_id", "")
+                    ctx.variables[f"{var}_id"] = ctx.variables.get("media_id", "")
+                    ctx.variables[f"{var}_mime"] = ctx.variables.get("mime_type", "")
+                    ctx.variables[f"{var}_caption"] = ctx.variables.get("caption", "")
+                    ctx.variables[f"{var}_filename"] = ctx.variables.get("filename", "")
+                else:
+                    ctx.variables[var] = user_text
                 ctx.awaiting_input = False
                 start = _next_node(ctx.current_node, edges)
             else:

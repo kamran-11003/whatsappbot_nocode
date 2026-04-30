@@ -501,6 +501,8 @@ function ParameterFields({
             <option value="text">Free text</option>
             <option value="buttons">Quick reply buttons (max 3)</option>
             <option value="list">Selectable list (max 10)</option>
+            <option value="location">Ask for location (interactive)</option>
+            <option value="media">Wait for any media (image/video/audio/doc)</option>
           </select>
           {(d.input_type || "text") === "buttons" && (
             <div className="mt-2 space-y-1">
@@ -659,6 +661,183 @@ function ParameterFields({
           </p>
         </>
       );
+    case "api_call": {
+      const headersJson = (() => {
+        try {
+          return JSON.stringify(d.headers || {}, null, 2);
+        } catch {
+          return "{}";
+        }
+      })();
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Calls an external HTTP API. The response (parsed JSON or raw text) is stored in{" "}
+            <code className="text-emerald-400">{"{{" + (d.save_to || "api_response") + "}}"}</code>{" "}
+            and the status code in{" "}
+            <code className="text-emerald-400">{"{{" + (d.save_to || "api_response") + "_status}}"}</code>.
+          </p>
+          <Label>Method</Label>
+          <select
+            value={d.method || "GET"}
+            onChange={(e) => set("method", e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+          >
+            <option>GET</option>
+            <option>POST</option>
+            <option>PUT</option>
+            <option>PATCH</option>
+            <option>DELETE</option>
+          </select>
+          <Label>URL</Label>
+          <Input
+            value={d.url || ""}
+            onChange={(e: any) => set("url", e.target.value)}
+            placeholder="https://api.example.com/users/{{contact_wa_id}}"
+          />
+          <Label>Headers (JSON object)</Label>
+          <Text
+            rows={4}
+            value={headersJson}
+            onChange={(e: any) => {
+              try {
+                set("headers", JSON.parse(e.target.value || "{}"));
+              } catch {
+                // keep raw text by storing nothing — user fixes JSON
+              }
+            }}
+            placeholder='{"Authorization": "Bearer {{api_token}}"}'
+          />
+          <Label>Body (JSON or raw, supports {"{{vars}}"})</Label>
+          <Text
+            rows={5}
+            value={d.body || ""}
+            onChange={(e: any) => set("body", e.target.value)}
+            placeholder={'{"name": "{{name}}", "phone": "{{contact_wa_id}}"}'}
+          />
+          <Label>Save response to variable</Label>
+          <Input
+            value={d.save_to || "api_response"}
+            onChange={(e: any) => set("save_to", e.target.value)}
+            placeholder="api_response"
+          />
+          <p className="text-[10px] text-slate-500 mt-2">
+            Output handles: <span className="text-emerald-400">success</span> (HTTP &lt; 400) /{" "}
+            <span className="text-red-400">error</span> (HTTP ≥ 400 or exception). Use a Condition
+            on{" "}
+            <code className="text-emerald-400">{"{{" + (d.save_to || "api_response") + "_status}}"}</code>{" "}
+            for finer-grained branching.
+          </p>
+        </>
+      );
+    }
+    case "media": {
+      const kind = (d.kind as string) || "image";
+      const needsSource = ["image", "video", "audio", "document", "sticker"].includes(kind);
+      const allowsCaption = ["image", "video", "document"].includes(kind);
+      return (
+        <>
+          <p className="text-xs text-slate-400">
+            Sends a rich WhatsApp message (media or location) to the user. Use a
+            public URL or a previously-uploaded media id in <em>Source</em>.
+          </p>
+          <Label>Kind</Label>
+          <select
+            value={kind}
+            onChange={(e) => set("kind", e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 p-2 rounded text-xs"
+          >
+            <option value="image">Image</option>
+            <option value="video">Video</option>
+            <option value="audio">Audio</option>
+            <option value="document">Document</option>
+            <option value="sticker">Sticker</option>
+            <option value="location">Send location (lat/lng)</option>
+            <option value="location_request">Ask user to share location</option>
+          </select>
+          {needsSource && (
+            <>
+              <Label>Source (URL or WhatsApp media id)</Label>
+              <Input
+                value={d.source || ""}
+                onChange={(e: any) => set("source", e.target.value)}
+                placeholder="https://example.com/file.jpg  OR  1234567890"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">
+                Templating supported, e.g. <code className="text-emerald-400">{"{{media_id}}"}</code>.
+              </p>
+            </>
+          )}
+          {allowsCaption && (
+            <>
+              <Label>Caption (optional)</Label>
+              <Text
+                rows={2}
+                value={d.caption || ""}
+                onChange={(e: any) => set("caption", e.target.value)}
+              />
+            </>
+          )}
+          {kind === "document" && (
+            <>
+              <Label>Filename (optional)</Label>
+              <Input
+                value={d.filename || ""}
+                onChange={(e: any) => set("filename", e.target.value)}
+                placeholder="invoice.pdf"
+              />
+            </>
+          )}
+          {kind === "location" && (
+            <>
+              <Label>Latitude</Label>
+              <Input
+                value={d.latitude || ""}
+                onChange={(e: any) => set("latitude", e.target.value)}
+                placeholder="24.8607"
+              />
+              <Label>Longitude</Label>
+              <Input
+                value={d.longitude || ""}
+                onChange={(e: any) => set("longitude", e.target.value)}
+                placeholder="67.0011"
+              />
+              <Label>Name (optional)</Label>
+              <Input
+                value={d.name || ""}
+                onChange={(e: any) => set("name", e.target.value)}
+                placeholder="Our Office"
+              />
+              <Label>Address (optional)</Label>
+              <Input
+                value={d.address || ""}
+                onChange={(e: any) => set("address", e.target.value)}
+                placeholder="Street, City"
+              />
+            </>
+          )}
+          {kind === "location_request" && (
+            <>
+              <Label>Prompt text</Label>
+              <Text
+                rows={2}
+                value={d.body_text || ""}
+                onChange={(e: any) => set("body_text", e.target.value)}
+                placeholder="Please share your location"
+              />
+              <p className="text-[10px] text-slate-500 mt-1">
+                User taps a button in WhatsApp and shares their current location. Use a
+                downstream <span className="text-purple-400">Question</span> with input
+                type <em>Ask for location</em> if you want to capture the response into
+                a variable, or read{" "}
+                <code className="text-emerald-400">{"{{latitude}}"}</code>/
+                <code className="text-emerald-400">{"{{longitude}}"}</code> on the next inbound.
+              </p>
+            </>
+          )}
+        </>
+      );
+    }
     default:
       return <p className="text-xs text-slate-500">No parameters.</p>;
   }
@@ -671,7 +850,7 @@ function ParameterFields({
  *
  * Hidden for control-only nodes that don't make sense as a reply source.
  */
-const NO_REPLY_TYPES = new Set(["initialize", "condition", "loop", "end", "question", "validation"]);
+const NO_REPLY_TYPES = new Set(["initialize", "condition", "loop", "end", "question", "validation", "media", "api_call"]);
 
 function ReplyField({
   node,

@@ -12,6 +12,8 @@ export const NODE_DEFS: NodeDef[] = [
   { type: "condition", label: "Condition", color: "bg-yellow-600", defaults: { variable: "last_user_input", operator: "contains", value: "" } },
   { type: "question", label: "Question", color: "bg-purple-600", defaults: { prompt: "What is your name?", variable: "name", input_type: "text", buttons: ["", "", ""], list_button: "Choose", list_rows: [{ title: "", description: "" }] } },
   { type: "validation", label: "Validation", color: "bg-rose-600", defaults: { variable: "", rule: "non_empty", pattern: "", error_message: "That doesn't look right. Please try again.", clear_on_fail: true } },
+  { type: "media", label: "Media", color: "bg-teal-600", defaults: { kind: "image", source: "", caption: "", filename: "", latitude: "", longitude: "", name: "", address: "", body_text: "Please share your location" } },
+  { type: "api_call", label: "API Call", color: "bg-indigo-600", defaults: { method: "GET", url: "https://api.example.com/users/{{contact_wa_id}}", headers: {}, body: "", save_to: "api_response" } },
 ];
 
 export default function NodePalette() {

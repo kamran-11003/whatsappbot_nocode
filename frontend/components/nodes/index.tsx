@@ -127,4 +127,6 @@ export const customNodeTypes = {
   condition: nodeFor("condition", ["true", "false"]),
   question: nodeFor("question"),
   validation: nodeFor("validation", ["ok", "fail"]),
+  media: nodeFor("media"),
+  api_call: nodeFor("api_call", ["success", "error"]),
 };
