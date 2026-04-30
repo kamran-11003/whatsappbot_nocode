@@ -21,8 +21,10 @@ export const gemini = {
     system: string;
     history: GeminiMsg[];
     user: string;
+    /** Lower = more deterministic. Default 0.2 for flow design. */
+    temperature?: number;
   }): Promise<string> {
-    const { apiKey, model, system, history, user } = opts;
+    const { apiKey, model, system, history, user, temperature = 0.2 } = opts;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
       model,
     )}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -30,7 +32,10 @@ export const gemini = {
       ...history.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
       { role: "user", parts: [{ text: user }] },
     ];
-    const body: any = { contents };
+    const body: any = {
+      contents,
+      generationConfig: { temperature, topP: 0.95, candidateCount: 1 },
+    };
     if (system) body.systemInstruction = { parts: [{ text: system }] };
     const r = await fetch(url, {
       method: "POST",
