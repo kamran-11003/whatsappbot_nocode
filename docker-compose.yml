@@ -1,0 +1,117 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: wm_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    command: ["--wiredTigerCacheSizeGB", "1"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: wm_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: wm_rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: wm_chroma
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+      STREAM_PARTITIONS: 16
+      MONGO_POOL_SIZE: 200
+    depends_on:
+      - mongo
+      - redis
+      - rabbitmq
+      - chroma
+    # Scale: docker compose up --scale backend=3
+    expose:
+      - "8000"
+
+  worker_inbound:
+    build: ./backend
+    restart: unless-stopped
+    command: ["python", "worker.py", "--mode", "inbound"]
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+      STREAM_PARTITIONS: 16
+      WORKER_CONCURRENCY: 50
+    depends_on:
+      - mongo
+      - redis
+      - rabbitmq
+    volumes:
+      - uploads:/app/uploads
+    # Scale: docker compose up --scale worker_inbound=10
+
+  worker_jobs:
+    build: ./backend
+    restart: unless-stopped
+    command: ["python", "worker.py", "--mode", "jobs"]
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+    depends_on:
+      - mongo
+      - redis
+      - rabbitmq
+      - chroma
+    volumes:
+      - uploads:/app/uploads
+    # Scale: docker compose up --scale worker_jobs=2
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+
+volumes:
+  mongo_data:
+  redis_data:
+  chroma_data:
+  uploads:
+
