@@ -19,9 +19,16 @@ class FlowSave(BaseModel):
 
 
 class CredentialsUpdate(BaseModel):
+    channel: Literal["whatsapp", "messenger", "instagram"] | None = None
+    # WhatsApp Cloud API
     phone_number_id: str | None = None
     access_token: str | None = None
     verify_token: str | None = None
+    # Messenger / Instagram
+    page_id: str | None = None
+    page_access_token: str | None = None
+    instagram_account_id: str | None = None
+    # LLM
     llm_provider: Literal["gemini", "openai", "anthropic"] | None = None
     llm_model: str | None = None
     llm_api_key: str | None = None

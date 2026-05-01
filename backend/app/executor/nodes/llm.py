@@ -11,7 +11,7 @@ async def llm(node, ctx, creds, persist):
     send_reply = bool(data.get("send_reply", True))
 
     provider = creds.get("llm_provider", "gemini")
-    model = creds.get("llm_model", "gemini-1.5-flash")
+    model = creds.get("llm_model", "gemini-2.0-flash")
     api_key = creds.get("llm_api_key", "")
 
     try:

@@ -11,6 +11,7 @@ class FlowContext:
     bot_id: str
     contact_wa_id: str
     contact_name: str = ""
+    channel: str = "whatsapp"
     variables: dict[str, Any] = field(default_factory=dict)
     history: list[dict] = field(default_factory=list)  # [{role, content}]
     current_node: str | None = None
@@ -21,6 +22,7 @@ class FlowContext:
     def to_dict(self) -> dict:
         return {
             "contact_name": self.contact_name,
+            "channel": self.channel,
             "variables": self.variables,
             "history": self.history[-50:],
             "current_node": self.current_node,
@@ -34,6 +36,7 @@ class FlowContext:
             bot_id=bot_id,
             contact_wa_id=contact,
             contact_name=data.get("contact_name", ""),
+            channel=data.get("channel", "whatsapp"),
             variables=data.get("variables", {}),
             history=data.get("history", []),
             current_node=data.get("current_node"),

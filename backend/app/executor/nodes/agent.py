@@ -31,7 +31,7 @@ async def agent(node, ctx, creds, persist):
 
     # Per-node overrides fall back to bot-wide credentials.
     provider = (data.get("provider") or creds.get("llm_provider") or "gemini").strip()
-    model = (data.get("model") or creds.get("llm_model") or "gemini-1.5-flash").strip()
+    model = (data.get("model") or creds.get("llm_model") or "gemini-2.0-flash").strip()
     api_key = (data.get("api_key") or creds.get("llm_api_key") or "").strip()
 
     instructions = render(str(data.get("instructions") or "You are a helpful assistant."), ctx)

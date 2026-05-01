@@ -42,11 +42,18 @@ async def create_bot(data: BotCreate):
     })
     await mongo.credentials().insert_one({
         "bot_id": bot_id,
+        "channel": "whatsapp",
+        # WhatsApp Cloud API
         "phone_number_id": "",
         "access_token": "",
         "verify_token": bot_id,  # default verify token = bot_id (unique)
+        # Messenger / Instagram
+        "page_id": "",
+        "page_access_token": "",
+        "instagram_account_id": "",
+        # LLM
         "llm_provider": "gemini",
-        "llm_model": "gemini-1.5-flash",
+        "llm_model": "gemini-2.0-flash",
         "llm_api_key": "",
     })
     doc["_id"] = res.inserted_id

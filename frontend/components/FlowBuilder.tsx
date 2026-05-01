@@ -90,6 +90,10 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
   const { screenToFlowPosition } = useReactFlow();
   const initial = useRef(false);
 
+  // Derive channel from the initialize node so palette + assistant are channel-aware
+  const channel: string =
+    (nodes.find((n) => n.type === "initialize")?.data?.channel as string) || "whatsapp";
+
   // Load flow on bot change
   useEffect(() => {
     initial.current = false;
@@ -381,7 +385,7 @@ function Builder({ botId, botName }: { botId: string; botName: string }) {
         assistantOpen={assistantOpen}
       />
       <div className="flex-1 flex relative overflow-hidden">
-        <NodePalette />
+        <NodePalette channel={channel} />
         <div className="flex-1 relative" onDrop={onDrop} onDragOver={onDragOver}>
           <ReactFlow
             nodes={nodes}

@@ -11,6 +11,18 @@ const SYSTEM_GRADIENT: Record<string, string> = {
   end: "from-slate-600 to-slate-800",
 };
 
+const CHANNEL_GRADIENT: Record<string, string> = {
+  whatsapp:  "from-emerald-500 to-teal-600",
+  messenger: "from-blue-500 to-indigo-600",
+  instagram: "from-pink-500 to-purple-600",
+};
+
+const CHANNEL_LABEL: Record<string, string> = {
+  whatsapp:  "WhatsApp",
+  messenger: "Messenger",
+  instagram: "Instagram",
+};
+
 function statusRing(status?: string) {
   if (status === "ok") return "ring-2 ring-emerald-400 ring-offset-2 ring-offset-slate-950";
   if (status === "error") return "ring-2 ring-red-500 ring-offset-2 ring-offset-slate-950";
@@ -28,6 +40,8 @@ function BaseNode({
   inputs = true,
   outputs = ["out"],
   disabled,
+  overrideGradient,
+  badge,
 }: {
   id: string;
   type: string;
@@ -35,10 +49,12 @@ function BaseNode({
   inputs?: boolean;
   outputs?: string[];
   disabled?: boolean;
+  overrideGradient?: string;
+  badge?: string;
 }) {
   const def = defMap[type];
   const gradient =
-    def?.gradient || SYSTEM_GRADIENT[type] || "from-slate-500 to-slate-700";
+    overrideGradient || def?.gradient || SYSTEM_GRADIENT[type] || "from-slate-500 to-slate-700";
   const Icon: LucideIcon = def?.icon || SYSTEM_ICONS[type] || Play;
   const trace = useRunStore((s) => s.trace);
   const entry = traceForNode(trace, id);
@@ -116,6 +132,11 @@ function BaseNode({
               {entry.ms}ms
             </span>
           )}
+          {badge && (
+            <span className="text-[9px] text-white/90 font-semibold bg-black/30 px-1.5 py-0.5 rounded shrink-0">
+              {badge}
+            </span>
+          )}
         </div>
 
         {/* Outputs row */}
@@ -174,7 +195,23 @@ const nodeFor = (type: string, outputs: string[] = ["out"], inputs = true) =>
   };
 
 export const customNodeTypes = {
-  initialize: nodeFor("initialize", ["out"], false),
+  initialize: function InitializeNode({ id, data }: NodeProps) {
+    const ch = (data?.channel as string) || "whatsapp";
+    const gradient = CHANNEL_GRADIENT[ch] || CHANNEL_GRADIENT.whatsapp;
+    const chLabel = CHANNEL_LABEL[ch] || ch;
+    return (
+      <BaseNode
+        id={id}
+        type="initialize"
+        label={data?.label || "Initialize"}
+        inputs={false}
+        outputs={["out"]}
+        disabled={data?.disabled}
+        overrideGradient={gradient}
+        badge={chLabel}
+      />
+    );
+  },
   reply: nodeFor("reply"),
   condition: nodeFor("condition", ["true", "false"]),
   question: nodeFor("question"),

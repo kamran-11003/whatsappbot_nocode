@@ -17,7 +17,7 @@ from app.executor.run_context import RunContext, set_dry_run, reset_dry_run
 from app.executor import nodes as node_handlers
 from app.queue.redis_stream import get_session, set_session, clear_session, ContactLock
 from app.routes.ws import publish_event
-from app.services.whatsapp import send_text
+from app.services.channel_router import send_text as channel_send_text
 
 # Node types that should never emit a follow-up WhatsApp reply, even if a
 # `data.reply` template is set on them. Control-flow / boundary nodes only.
@@ -171,21 +171,20 @@ async def _run_one_node(
         ):
             rendered = render(str(reply_tpl), ctx)
             if rendered.strip():
-                send_resp = await send_text(
-                    creds.get("phone_number_id", ""),
-                    creds.get("access_token", ""),
+                send_resp = await channel_send_text(
+                    ctx.channel,
+                    creds,
                     ctx.contact_wa_id,
                     rendered,
                 )
                 entry["reply"] = rendered
                 entry["send_response"] = send_resp
-                # If WhatsApp returned non-2xx, mark the trace entry as error
-                # so the UI surfaces it instead of silently saying "ok".
+                # If the send API returned non-2xx, mark trace entry as error.
                 status_code = (send_resp or {}).get("status", 0)
                 if isinstance(status_code, int) and status_code >= 400:
                     entry["status"] = "error"
                     entry["error"] = (
-                        f"WhatsApp send failed: HTTP {status_code} "
+                        f"Send failed ({ctx.channel}): HTTP {status_code} "
                         f"{(send_resp or {}).get('body','')[:500]}"
                     )
                 else:
@@ -290,6 +289,12 @@ async def run_flow(
         ctx.history.append({"role": "user", "content": user_text})
         ctx.run = rc
 
+        # Set channel from inbound payload or credentials (fallback: whatsapp)
+        if inbound_payload and inbound_payload.get("channel"):
+            ctx.channel = inbound_payload["channel"]
+        else:
+            ctx.channel = (creds.get("channel") or "whatsapp").lower()
+
         # Seed ctx.variables with the full inbound payload so downstream nodes
         # can reference any field via dotted templates, e.g. {{message.text.body}}
         # or {{contact_name}}. Existing variables (from the persisted session)
@@ -301,6 +306,7 @@ async def run_flow(
         seed = {
             "contact_wa_id": contact_wa_id,
             "contact_name": contact_name,
+            "channel": ctx.channel,
             "message_type": message_type,
             "last_user_input": user_text,
         }
@@ -312,8 +318,8 @@ async def run_flow(
             # Flatten typed inbound payload (media_id, latitude, contact_phones,
             # etc.) into top-level variables so flows can use {{media_id}} etc.
             try:
-                from app.services.whatsapp import extract_user_payload
-                for k, v in extract_user_payload(msg).items():
+                from app.services.channel_router import extract_user_payload
+                for k, v in extract_user_payload(ctx.channel, msg).items():
                     seed[k] = v
             except Exception:
                 pass
@@ -395,9 +401,10 @@ async def handle_inbound(payload: dict):
     contact = payload["contact_wa_id"]
     contact_name = payload.get("contact_name", "")
     message = payload.get("message", {})
+    channel = payload.get("channel", "whatsapp")
 
-    from app.services.whatsapp import extract_user_text
-    user_text = extract_user_text(message)
+    from app.services.channel_router import extract_user_text
+    user_text = extract_user_text(channel, message)
 
     async with ContactLock(bot_id, contact, ttl=60):
         await run_flow(

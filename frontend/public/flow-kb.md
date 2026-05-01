@@ -37,6 +37,9 @@ that the validator will reject and the user will not be able to apply.
    prose what's missing instead of guessing.
 10. If the user only asks a question, do NOT emit JSON at all.
 
+11. **`template` node is WhatsApp-only.** Never use it in Messenger or Instagram flows — it will return an error handle. Use `reply` instead.
+12. **Check the `channel` field on the `initialize` node** before proposing `template` nodes. If `channel` is `"messenger"` or `"instagram"`, treat `template` as unavailable.
+
 ## 1. Top-level shape
 
 ```json
@@ -72,14 +75,29 @@ either reference a known one or one that another node in the same flow saves.
 Each entry below lists: **type** — purpose; `data` fields; output `sourceHandle`(s).
 
 ### initialize — entry point (mandatory)
-- data: `{ "label": "Init" }` (no other fields)
+- data: `{ "label": "Init", "channel": "whatsapp" }`
+- `channel`: `"whatsapp"` | `"messenger"` | `"instagram"` — REQUIRED. Determines which send API is used.
 - handles: `out`
 - Exactly ONE `initialize` node per flow. Always included.
+- Built-in variable `{{channel}}` is available downstream.
 
-### reply — send a WhatsApp text message
+### Channel compatibility table
+
+| Node type    | WhatsApp | Messenger | Instagram |
+|-------------|----------|-----------|-----------|
+| reply        | ✅        | ✅         | ✅         |
+| question     | ✅        | ✅ (list→buttons fallback) | ✅ (list→buttons fallback) |
+| media        | ✅        | ✅ (no sticker/location_request) | ✅ (no sticker/location_request) |
+| template     | ✅        | ❌ (returns error handle) | ❌ (returns error handle) |
+| condition    | ✅        | ✅         | ✅         |
+| agent        | ✅        | ✅         | ✅         |
+| api_call     | ✅        | ✅         | ✅         |
+| all others   | ✅        | ✅         | ✅         |
+
+### reply — send a text message (all channels)
 - data: `{ "reply": "Hi {{contact_name}}!" }`
 - handles: `out`
-- Templating supported. Use this for any plain outbound text.
+- Templating supported. Works on WhatsApp, Messenger, and Instagram.
 
 ### condition — branch on a variable
 - data: `{ "variable": "last_user_input", "operator": "equals|contains|starts_with|ends_with|regex|gt|lt|empty|not_empty", "value": "hi" }`

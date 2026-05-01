@@ -5,8 +5,15 @@ import { api } from "@/lib/api";
 
 type Section = "whatsapp" | "llm";
 
+// Fields each channel owns (used when merging saves)
+const CHANNEL_FIELDS: Record<string, string[]> = {
+  whatsapp:   ["channel", "phone_number_id", "access_token", "verify_token"],
+  messenger:  ["channel", "page_id", "page_access_token", "verify_token"],
+  instagram:  ["channel", "page_id", "page_access_token", "instagram_account_id", "verify_token"],
+};
+
 const SECTION_FIELDS: Record<Section, string[]> = {
-  whatsapp: ["phone_number_id", "access_token", "verify_token"],
+  whatsapp: ["channel", "phone_number_id", "access_token", "verify_token", "page_id", "page_access_token", "instagram_account_id"],
   llm: ["llm_provider", "llm_model", "llm_api_key"],
 };
 
@@ -66,26 +73,122 @@ export default function CredentialsForm({
   if (loading)
     return <div className="text-xs text-slate-500 py-2">Loading credentials…</div>;
 
+  const channel: string = creds.channel || "whatsapp";
+
   return (
     <div className="space-y-3">
       {section === "whatsapp" && (
         <>
-          <Field
-            label="Phone Number ID"
-            v={creds.phone_number_id}
-            on={(v) => update("phone_number_id", v)}
-          />
-          <Field
-            label="Access Token"
-            v={creds.access_token}
-            on={(v) => update("access_token", v)}
-            type="password"
-          />
-          <Field
-            label="Verify Token"
-            v={creds.verify_token}
-            on={(v) => update("verify_token", v)}
-          />
+          {/* ── Channel selector ── */}
+          <div>
+            <Label>Channel</Label>
+            <div className="grid grid-cols-3 gap-1">
+              {(["whatsapp", "messenger", "instagram"] as const).map((ch) => {
+                const labels: Record<string, string> = {
+                  whatsapp: "WhatsApp",
+                  messenger: "Messenger",
+                  instagram: "Instagram",
+                };
+                const colors: Record<string, string> = {
+                  whatsapp: "border-emerald-500 text-emerald-400 bg-emerald-950/40",
+                  messenger: "border-blue-500 text-blue-400 bg-blue-950/40",
+                  instagram: "border-pink-500 text-pink-400 bg-pink-950/40",
+                };
+                const inactive = "border-slate-700 text-slate-400 bg-slate-900 hover:border-slate-500";
+                return (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() => update("channel", ch)}
+                    className={`px-2 py-1.5 rounded border text-[11px] font-medium transition-colors ${
+                      channel === ch ? colors[ch] : inactive
+                    }`}
+                  >
+                    {labels[ch]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── WhatsApp fields ── */}
+          {channel === "whatsapp" && (
+            <>
+              <Field
+                label="Phone Number ID"
+                v={creds.phone_number_id}
+                on={(v) => update("phone_number_id", v)}
+              />
+              <Field
+                label="Access Token"
+                v={creds.access_token}
+                on={(v) => update("access_token", v)}
+                type="password"
+              />
+              <Field
+                label="Verify Token"
+                v={creds.verify_token}
+                on={(v) => update("verify_token", v)}
+              />
+            </>
+          )}
+
+          {/* ── Messenger fields ── */}
+          {channel === "messenger" && (
+            <>
+              <Field
+                label="Page ID"
+                v={creds.page_id}
+                on={(v) => update("page_id", v)}
+              />
+              <Field
+                label="Page Access Token"
+                v={creds.page_access_token}
+                on={(v) => update("page_access_token", v)}
+                type="password"
+              />
+              <Field
+                label="Verify Token"
+                v={creds.verify_token}
+                on={(v) => update("verify_token", v)}
+              />
+              <div className="text-[10px] text-slate-500 bg-blue-950/20 border border-blue-900/40 rounded p-2">
+                In your Meta App → Messenger product → Webhooks, subscribe to <code className="text-blue-400">messages</code> and <code className="text-blue-400">messaging_postbacks</code>.
+              </div>
+            </>
+          )}
+
+          {/* ── Instagram fields ── */}
+          {channel === "instagram" && (
+            <>
+              <Field
+                label="Page ID"
+                v={creds.page_id}
+                on={(v) => update("page_id", v)}
+              />
+              <Field
+                label="Page Access Token"
+                v={creds.page_access_token}
+                on={(v) => update("page_access_token", v)}
+                type="password"
+              />
+              <Field
+                label="Instagram Account ID"
+                v={creds.instagram_account_id}
+                on={(v) => update("instagram_account_id", v)}
+              />
+              <Field
+                label="Verify Token"
+                v={creds.verify_token}
+                on={(v) => update("verify_token", v)}
+              />
+              <div className="text-[10px] text-slate-500 bg-pink-950/20 border border-pink-900/40 rounded p-2">
+                In your Meta App → Instagram product → Webhooks, subscribe to <code className="text-pink-400">messages</code>. Your IG account must be connected to the Facebook Page.
+              </div>
+            </>
+          )}
+
+          {/* ── Webhook URL (all channels) ── */}
           <div>
             <Label>Webhook URL</Label>
             <div className="bg-slate-950 border border-slate-800 p-2 rounded text-[11px] font-mono break-all text-slate-400">

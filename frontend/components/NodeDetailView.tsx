@@ -197,14 +197,20 @@ export default function NodeDetailView({ botId, node, onChange, onClose, onDelet
                 onClick={listenForInbound}
                 disabled={listening}
                 className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 px-3 py-1.5 rounded text-xs flex items-center gap-1.5"
-                title="Wait for the next real inbound WhatsApp message"
+                title="Wait for the next real inbound message"
               >
                 {listening ? (
                   <Loader2 size={13} className="animate-spin" />
                 ) : (
                   <Radio size={13} />
                 )}
-                {listening ? "Listening…" : "Listen for test event"}
+                {listening
+                  ? "Listening…"
+                  : node.data?.channel === "messenger"
+                  ? "Listen for Messenger message"
+                  : node.data?.channel === "instagram"
+                  ? "Listen for Instagram DM"
+                  : "Listen for test event"}
               </button>
             ) : (
               <button
@@ -286,8 +292,9 @@ export default function NodeDetailView({ botId, node, onChange, onClose, onDelet
                   {listenStatus || (
                     <>
                       Click <span className="text-emerald-400">Listen for test event</span>{" "}
-                      then send a WhatsApp message to your business number. The incoming
-                      payload will appear here.
+                      then send a message to your{" "}
+                      {node.data?.channel === "messenger" ? "Facebook Page" : node.data?.channel === "instagram" ? "Instagram account" : "WhatsApp business number"}.
+                      The incoming payload will appear here.
                     </>
                   )}
                 </div>
@@ -434,8 +441,40 @@ function ParameterFields({
       return (
         <div className="space-y-3">
           <p className="text-xs text-slate-400">
-            Entry point of the workflow. Configure your WhatsApp Cloud API credentials here.
+            Entry point of the workflow. Select your channel then configure the credentials below.
           </p>
+          {/* Channel selector */}
+          <div>
+            <label className="text-xs text-slate-400 block mb-1">Channel</label>
+            <div className="grid grid-cols-3 gap-1">
+              {(["whatsapp", "messenger", "instagram"] as const).map((ch) => {
+                const labels: Record<string, string> = { whatsapp: "WhatsApp", messenger: "Messenger", instagram: "Instagram" };
+                const active: Record<string, string> = {
+                  whatsapp:  "border-emerald-500 text-emerald-400 bg-emerald-950/40",
+                  messenger: "border-blue-500 text-blue-400 bg-blue-950/40",
+                  instagram: "border-pink-500 text-pink-400 bg-pink-950/40",
+                };
+                const cur = d.channel || "whatsapp";
+                return (
+                  <button
+                    key={ch}
+                    type="button"
+                    onClick={() => set("channel", ch)}
+                    className={`px-2 py-1.5 rounded border text-[11px] font-medium transition-colors ${
+                      cur === ch ? active[ch] : "border-slate-700 text-slate-400 bg-slate-900 hover:border-slate-500"
+                    }`}
+                  >
+                    {labels[ch]}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1">
+              {(d.channel || "whatsapp") === "whatsapp" && "Requires Phone Number ID + Access Token from Meta WhatsApp Cloud API."}
+              {d.channel === "messenger" && "Requires Facebook Page ID + Page Access Token. Subscribe to messages & messaging_postbacks webhooks."}
+              {d.channel === "instagram" && "Requires Facebook Page ID + Page Access Token + Instagram Account ID. Page must be linked to the IG account."}
+            </p>
+          </div>
           <CredentialsForm botId={botId} section="whatsapp" />
         </div>
       );

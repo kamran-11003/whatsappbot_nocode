@@ -1,5 +1,5 @@
 from app.executor.context import render
-from app.services.whatsapp import send_text, send_buttons, send_list, request_location
+from app.services import channel_router
 
 
 async def question(node, ctx, creds, persist):
@@ -15,20 +15,24 @@ async def question(node, ctx, creds, persist):
       buttons:    list[str] (max 3, used when input_type="buttons")
       list_button:str — label of the WhatsApp list trigger button
       list_rows:  list[{title, description?}] (max 10) for input_type="list"
+
+    For Messenger / Instagram:
+      - "list" falls back to quick replies (first 3 rows as buttons)
+      - "location" sends a plain text prompt (no interactive button available)
     """
     data = node.get("data", {}) or {}
     prompt = render(str(data.get("prompt", "?")), ctx)
-    pn = creds.get("phone_number_id", "")
-    tok = creds.get("access_token", "")
+    channel = ctx.channel
     input_type = (data.get("input_type") or "text").lower()
 
     if input_type == "buttons":
         raw = data.get("buttons") or []
         buttons = [render(str(b), ctx) for b in raw if str(b).strip()][:3]
         if buttons:
-            await send_buttons(pn, tok, ctx.contact_wa_id, prompt, buttons)
+            await channel_router.send_buttons(channel, creds, ctx.contact_wa_id, prompt, buttons)
         else:
-            await send_text(pn, tok, ctx.contact_wa_id, prompt)
+            await channel_router.send_text(channel, creds, ctx.contact_wa_id, prompt)
+
     elif input_type == "list":
         rows_raw = data.get("list_rows") or []
         rows: list[dict] = []
@@ -47,18 +51,23 @@ async def question(node, ctx, creds, persist):
                     row["description"] = d
                 rows.append(row)
         if rows:
-            await send_list(
-                pn, tok, ctx.contact_wa_id, prompt,
+            # channel_router.send_list falls back to quick replies on Messenger/IG
+            await channel_router.send_list(
+                channel, creds, ctx.contact_wa_id, prompt,
                 button_label=str(data.get("list_button") or "Choose"),
                 rows=rows,
             )
         else:
-            await send_text(pn, tok, ctx.contact_wa_id, prompt)
+            await channel_router.send_text(channel, creds, ctx.contact_wa_id, prompt)
+
     elif input_type == "location":
-        await request_location(pn, tok, ctx.contact_wa_id, prompt)
+        # WhatsApp: sends interactive location request button
+        # Messenger/IG: sends plain text prompt (no interactive location button available)
+        await channel_router.request_location(channel, creds, ctx.contact_wa_id, prompt)
+
     else:
         # "text" and "media" both just send the prompt as plain text and pause.
-        await send_text(pn, tok, ctx.contact_wa_id, prompt)
+        await channel_router.send_text(channel, creds, ctx.contact_wa_id, prompt)
 
     ctx.history.append({"role": "assistant", "content": prompt})
     await persist(ctx.bot_id, ctx.contact_wa_id, ctx.contact_name, "out", prompt, "text")

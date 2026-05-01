@@ -114,7 +114,10 @@ export const SYSTEM_ICONS: Record<string, LucideIcon> = {
 
 const CATEGORIES: NodeDef["category"][] = ["Messaging", "Logic", "Flow", "Data", "AI"];
 
-export default function NodePalette() {
+// Node types that only work on WhatsApp (will show a warning badge on other channels)
+const WA_ONLY_TYPES = new Set(["template"]);
+
+export default function NodePalette({ channel = "whatsapp" }: { channel?: string }) {
   const onDragStart = (e: React.DragEvent, type: string) => {
     e.dataTransfer.setData("application/reactflow", type);
     e.dataTransfer.effectAllowed = "move";
@@ -136,17 +139,27 @@ export default function NodePalette() {
               <div className="space-y-1">
                 {items.map((d) => {
                   const Icon = d.icon;
+                  const waOnly = WA_ONLY_TYPES.has(d.type) && channel !== "whatsapp";
                   return (
                     <div
                       key={d.type}
                       draggable
                       onDragStart={(e) => onDragStart(e, d.type)}
-                      className={`group relative flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg p-2 cursor-grab active:cursor-grabbing select-none transition-colors`}
+                      title={waOnly ? `${d.label} is WhatsApp-only and will return an error on ${channel}` : undefined}
+                      className={`group relative flex items-center gap-2 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-lg p-2 cursor-grab active:cursor-grabbing select-none transition-colors ${waOnly ? "opacity-60" : ""}`}
                     >
                       <div className={`flex items-center justify-center w-7 h-7 rounded-md bg-gradient-to-br ${d.gradient} shadow-md shrink-0`}>
                         <Icon size={14} className="text-white" />
                       </div>
-                      <span className="text-[12px] text-slate-200 font-medium">{d.label}</span>
+                      <span className="text-[12px] text-slate-200 font-medium flex-1">{d.label}</span>
+                      {waOnly && (
+                        <span
+                          title={`Not supported on ${channel}`}
+                          className="text-[9px] bg-amber-900/60 text-amber-400 border border-amber-800 px-1 py-0.5 rounded font-semibold shrink-0"
+                        >
+                          WA only
+                        </span>
+                      )}
                     </div>
                   );
                 })}

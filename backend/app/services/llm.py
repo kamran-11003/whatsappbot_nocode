@@ -1,6 +1,35 @@
 """Provider-agnostic LLM caller. BYOK per bot."""
+import asyncio
+import logging
 import httpx
 from app.executor.run_context import is_dry_run
+
+log = logging.getLogger(__name__)
+
+# Retry settings for 429 / 503 (transient quota/overload errors)
+_MAX_RETRIES = 4
+_RETRY_BASE_S = 5   # first wait: 5 s, then 10, 20, 40
+
+
+async def _post_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
+    """POST with exponential backoff on 429/503."""
+    for attempt in range(_MAX_RETRIES + 1):
+        r = await client.post(url, **kwargs)
+        if r.status_code not in (429, 503) or attempt == _MAX_RETRIES:
+            r.raise_for_status()
+            return r
+        wait = _RETRY_BASE_S * (2 ** attempt)
+        # Honour Retry-After header when present
+        retry_after = r.headers.get("Retry-After") or r.headers.get("retry-after")
+        if retry_after:
+            try:
+                wait = max(wait, int(retry_after))
+            except ValueError:
+                pass
+        log.warning("LLM %s (attempt %d/%d) – waiting %ds before retry", r.status_code, attempt + 1, _MAX_RETRIES, wait)
+        await asyncio.sleep(wait)
+    r.raise_for_status()   # unreachable but satisfies type checker
+    return r
 
 
 async def chat(provider: str, model: str, api_key: str, system: str, user: str, history: list[dict] | None = None) -> str:
@@ -22,12 +51,14 @@ async def _gemini(model: str, api_key: str, system: str, user: str, history: lis
     for h in history:
         contents.append({"role": "user" if h["role"] == "user" else "model", "parts": [{"text": h["content"]}]})
     contents.append({"role": "user", "parts": [{"text": user}]})
-    payload = {"contents": contents}
+    payload: dict = {
+        "contents": contents,
+        "generationConfig": {"temperature": 0.7, "candidateCount": 1},
+    }
     if system:
         payload["systemInstruction"] = {"parts": [{"text": system}]}
-    async with httpx.AsyncClient(timeout=60.0) as c:
-        r = await c.post(url, json=payload)
-        r.raise_for_status()
+    async with httpx.AsyncClient(timeout=90.0) as c:
+        r = await _post_with_retry(c, url, json=payload)
         data = r.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
 
@@ -41,9 +72,8 @@ async def _openai(model: str, api_key: str, system: str, user: str, history: lis
     msgs.extend(history)
     msgs.append({"role": "user", "content": user})
     payload = {"model": model, "messages": msgs}
-    async with httpx.AsyncClient(timeout=60.0) as c:
-        r = await c.post(url, json=payload, headers=headers)
-        r.raise_for_status()
+    async with httpx.AsyncClient(timeout=90.0) as c:
+        r = await _post_with_retry(c, url, json=payload, headers=headers)
         data = r.json()
         return data["choices"][0]["message"]["content"]
 
@@ -57,8 +87,7 @@ async def _anthropic(model: str, api_key: str, system: str, user: str, history: 
     }
     msgs = list(history) + [{"role": "user", "content": user}]
     payload = {"model": model, "max_tokens": 1024, "system": system or "", "messages": msgs}
-    async with httpx.AsyncClient(timeout=60.0) as c:
-        r = await c.post(url, json=payload, headers=headers)
-        r.raise_for_status()
+    async with httpx.AsyncClient(timeout=90.0) as c:
+        r = await _post_with_retry(c, url, json=payload, headers=headers)
         data = r.json()
         return data["content"][0]["text"]

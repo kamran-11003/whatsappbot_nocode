@@ -24,6 +24,15 @@ def _r_list(items, ctx) -> list[str]:
 
 async def template(node, ctx, creds, persist):
     data = node.get("data", {}) or {}
+
+    # Template messages are a WhatsApp-only feature
+    channel = ctx.channel
+    if channel != "whatsapp":
+        return {
+            "next_handle": "error",
+            "error": f"Template messages are not supported on channel '{channel}'. Use a reply node instead.",
+        }
+
     pn = creds.get("phone_number_id", "")
     tok = creds.get("access_token", "")
 
