@@ -443,39 +443,7 @@ function ParameterFields({
           <p className="text-xs text-slate-400">
             Entry point of the workflow. Select your channel then configure the credentials below.
           </p>
-          {/* Channel selector */}
-          <div>
-            <label className="text-xs text-slate-400 block mb-1">Channel</label>
-            <div className="grid grid-cols-3 gap-1">
-              {(["whatsapp", "messenger", "instagram"] as const).map((ch) => {
-                const labels: Record<string, string> = { whatsapp: "WhatsApp", messenger: "Messenger", instagram: "Instagram" };
-                const active: Record<string, string> = {
-                  whatsapp:  "border-emerald-500 text-emerald-400 bg-emerald-950/40",
-                  messenger: "border-blue-500 text-blue-400 bg-blue-950/40",
-                  instagram: "border-pink-500 text-pink-400 bg-pink-950/40",
-                };
-                const cur = d.channel || "whatsapp";
-                return (
-                  <button
-                    key={ch}
-                    type="button"
-                    onClick={() => set("channel", ch)}
-                    className={`px-2 py-1.5 rounded border text-[11px] font-medium transition-colors ${
-                      cur === ch ? active[ch] : "border-slate-700 text-slate-400 bg-slate-900 hover:border-slate-500"
-                    }`}
-                  >
-                    {labels[ch]}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1">
-              {(d.channel || "whatsapp") === "whatsapp" && "Requires Phone Number ID + Access Token from Meta WhatsApp Cloud API."}
-              {d.channel === "messenger" && "Requires Facebook Page ID + Page Access Token. Subscribe to messages & messaging_postbacks webhooks."}
-              {d.channel === "instagram" && "Requires Facebook Page ID + Page Access Token + Instagram Account ID. Page must be linked to the IG account."}
-            </p>
-          </div>
-          <CredentialsForm botId={botId} section="whatsapp" />
+          <CredentialsForm botId={botId} section="whatsapp" onChannelChange={(ch) => set("channel", ch)} />
         </div>
       );
     case "reply":

@@ -25,9 +25,11 @@ const SECTION_FIELDS: Record<Section, string[]> = {
 export default function CredentialsForm({
   botId,
   section,
+  onChannelChange,
 }: {
   botId: string;
   section: Section;
+  onChannelChange?: (ch: string) => void;
 }) {
   const [creds, setCreds] = useState<any>({});
   const [loading, setLoading] = useState(true);
@@ -42,9 +44,12 @@ export default function CredentialsForm({
       .then((c) => {
         setCreds(c || {});
         dirty.current = false;
+        // Sync initial channel to node data so badge + palette are correct on open
+        if (onChannelChange && c?.channel) onChannelChange(c.channel);
       })
       .catch(() => setCreds({}))
       .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [botId]);
 
   const update = (k: string, v: any) => {
@@ -99,7 +104,7 @@ export default function CredentialsForm({
                   <button
                     key={ch}
                     type="button"
-                    onClick={() => update("channel", ch)}
+                    onClick={() => { update("channel", ch); onChannelChange?.(ch); }}
                     className={`px-2 py-1.5 rounded border text-[11px] font-medium transition-colors ${
                       channel === ch ? colors[ch] : inactive
                     }`}
