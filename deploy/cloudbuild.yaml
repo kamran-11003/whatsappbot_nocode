@@ -15,6 +15,12 @@ substitutions:
   _AR_REPO: whatsapp-mate
   _VPC_NETWORK: default
   _VPC_SUBNET: default
+  _GEMINI_MODEL: gemini-3.1-flash-lite-preview
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/wm-gemini-api-key/versions/latest
+      env: GEMINI_API_KEY
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -34,8 +40,13 @@ steps:
   # ── 2. Build frontend image ────────────────────────────────────────────────
   - id: build-frontend
     name: gcr.io/cloud-builders/docker
+    secretEnv: [GEMINI_API_KEY]
     args:
       - build
+      - --build-arg
+      - NEXT_PUBLIC_GEMINI_API_KEY=$$GEMINI_API_KEY
+      - --build-arg
+      - NEXT_PUBLIC_GEMINI_MODEL=${_GEMINI_MODEL}
       - -t
       - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:$COMMIT_SHA
       - -t
@@ -72,7 +83,6 @@ steps:
       - --min-instances=1
       - --max-instances=1
       - --no-cpu-throttling
-      - --execution-environment=gen2
       - --network=${_VPC_NETWORK}
       - --subnet=${_VPC_SUBNET}
       - --vpc-egress=private-ranges-only

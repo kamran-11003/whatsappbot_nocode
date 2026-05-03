@@ -11,6 +11,11 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # BACKEND_URL is injected at runtime via rewrites(); a placeholder is fine at build time
 ENV NEXT_TELEMETRY_DISABLED=1
+# Gemini vars are NEXT_PUBLIC_ so must be baked in at build time
+ARG NEXT_PUBLIC_GEMINI_API_KEY
+ARG NEXT_PUBLIC_GEMINI_MODEL=gemini-2.0-flash
+ENV NEXT_PUBLIC_GEMINI_API_KEY=$NEXT_PUBLIC_GEMINI_API_KEY
+ENV NEXT_PUBLIC_GEMINI_MODEL=$NEXT_PUBLIC_GEMINI_MODEL
 RUN npm run build
 
 # ── Stage 3: production runner ──────────────────────────────────────────────
