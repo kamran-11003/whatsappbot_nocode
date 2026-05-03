@@ -38,20 +38,21 @@ steps:
       - ./backend
 
   # ── 2. Build frontend image ────────────────────────────────────────────────
+  # Uses bash entrypoint so the shell expands $GEMINI_API_KEY from secretEnv
+  # into the --build-arg value, baking it into the Next.js bundle at build time.
   - id: build-frontend
     name: gcr.io/cloud-builders/docker
+    entrypoint: bash
     secretEnv: [GEMINI_API_KEY]
     args:
-      - build
-      - --build-arg
-      - NEXT_PUBLIC_GEMINI_API_KEY=$$GEMINI_API_KEY
-      - --build-arg
-      - NEXT_PUBLIC_GEMINI_MODEL=${_GEMINI_MODEL}
-      - -t
-      - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:$COMMIT_SHA
-      - -t
-      - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:latest
-      - ./frontend
+      - -c
+      - |
+        docker build \
+          --build-arg NEXT_PUBLIC_GEMINI_API_KEY="$GEMINI_API_KEY" \
+          --build-arg NEXT_PUBLIC_GEMINI_MODEL="${_GEMINI_MODEL}" \
+          -t ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:$COMMIT_SHA \
+          -t ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:latest \
+          ./frontend
     waitFor: ["-"]   # parallel with build-backend
 
   # ── 3. Push images ─────────────────────────────────────────────────────────
