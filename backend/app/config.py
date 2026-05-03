@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
     chroma_host: str = "localhost"
     chroma_port: int = 8001
+    chroma_ssl: bool = False   # set True when Chroma runs behind HTTPS (Cloud Run)
     backend_port: int = 8000
 
     # Scaling knobs

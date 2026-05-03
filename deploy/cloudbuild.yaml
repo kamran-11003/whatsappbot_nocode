@@ -1,0 +1,182 @@
+# Cloud Build pipeline — triggered on push to the `deploy` branch.
+#
+# Data services (MongoDB, Redis, RabbitMQ) run as Docker containers on the
+# wm-data Compute Engine VM inside the wm-vpc VPC. Cloud Run services reach
+# them through the Serverless VPC Access connector — no external accounts needed.
+#
+# Substitution variables (set in Cloud Build trigger UI or --substitutions flag):
+#   _GCP_REGION     e.g. us-central1
+#   _AR_REPO        Artifact Registry repo name, e.g. whatsapp-mate
+#   _VPC_CONNECTOR  Serverless VPC connector name, e.g. wm-connector
+
+substitutions:
+  _GCP_REGION: us-central1
+  _AR_REPO: whatsapp-mate
+  _VPC_CONNECTOR: wm-connector
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # ── 1. Build backend image ─────────────────────────────────────────────────
+  - id: build-backend
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA
+      - -t
+      - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:latest
+      - ./backend
+
+  # ── 2. Build frontend image ────────────────────────────────────────────────
+  - id: build-frontend
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:$COMMIT_SHA
+      - -t
+      - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:latest
+      - ./frontend
+    waitFor: ["-"]   # parallel with build-backend
+
+  # ── 3. Push images ─────────────────────────────────────────────────────────
+  - id: push-backend
+    name: gcr.io/cloud-builders/docker
+    args: [push, "--all-tags", "${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend"]
+    waitFor: [build-backend]
+
+  - id: push-frontend
+    name: gcr.io/cloud-builders/docker
+    args: [push, "--all-tags", "${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend"]
+    waitFor: [build-frontend]
+
+  # ── 4. Deploy wm-chroma (Cloud Run gen2 + GCS FUSE volume) ────────────────
+  - id: deploy-chroma
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - wm-chroma
+      - --image=chromadb/chroma:0.5.5
+      - --region=${_GCP_REGION}
+      - --platform=managed
+      - --execution-environment=gen2
+      - --port=8000
+      - --cpu=1
+      - --memory=1Gi
+      - --min-instances=1
+      - --max-instances=1
+      - --no-cpu-throttling
+      - --vpc-connector=${_VPC_CONNECTOR}
+      - --vpc-egress=private-ranges-only
+      - --add-volume=name=chroma-data,type=cloud-storage,bucket=$PROJECT_ID-chroma-data
+      - --add-volume-mount=volume=chroma-data,mount-path=/chroma/chroma
+      - --no-allow-unauthenticated
+      - --set-env-vars=IS_PERSISTENT=1
+    waitFor: ["-"]   # parallel with builds
+
+  # ── 5. Deploy wm-backend ──────────────────────────────────────────────────
+  - id: deploy-backend
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        CHROMA_URL=$(gcloud run services describe wm-chroma \
+          --region=${_GCP_REGION} --format='value(status.url)')
+        CHROMA_HOST=${CHROMA_URL#https://}
+        gcloud run deploy wm-backend \
+          --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA \
+          --region=${_GCP_REGION} \
+          --platform=managed \
+          --port=8000 \
+          --cpu=2 --memory=2Gi \
+          --min-instances=1 --max-instances=10 \
+          --concurrency=80 \
+          --allow-unauthenticated \
+          --vpc-connector=${_VPC_CONNECTOR} \
+          --vpc-egress=private-ranges-only \
+          --set-secrets=MONGO_URL=wm-mongo-url:latest,REDIS_URL=wm-redis-url:latest,RABBITMQ_URL=wm-rabbitmq-url:latest \
+          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,MONGO_POOL_SIZE=200,CHROMA_HOST=${CHROMA_HOST},CHROMA_PORT=443,CHROMA_SSL=true"
+    waitFor: [push-backend, deploy-chroma]
+
+  # ── 6. Deploy wm-worker-inbound ───────────────────────────────────────────
+  - id: deploy-worker-inbound
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        CHROMA_URL=$(gcloud run services describe wm-chroma \
+          --region=${_GCP_REGION} --format='value(status.url)')
+        CHROMA_HOST=${CHROMA_URL#https://}
+        gcloud run deploy wm-worker-inbound \
+          --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA \
+          --region=${_GCP_REGION} \
+          --platform=managed \
+          --port=8080 \
+          --cpu=2 --memory=2Gi \
+          --min-instances=1 --max-instances=5 \
+          --no-cpu-throttling \
+          --no-allow-unauthenticated \
+          --vpc-connector=${_VPC_CONNECTOR} \
+          --vpc-egress=private-ranges-only \
+          --command=/app/start-worker.sh \
+          --args=--mode,inbound \
+          --set-secrets=MONGO_URL=wm-mongo-url:latest,REDIS_URL=wm-redis-url:latest,RABBITMQ_URL=wm-rabbitmq-url:latest \
+          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,WORKER_CONCURRENCY=50,CHROMA_HOST=${CHROMA_HOST},CHROMA_PORT=443,CHROMA_SSL=true"
+    waitFor: [deploy-backend]
+
+  # ── 7. Deploy wm-worker-jobs ──────────────────────────────────────────────
+  - id: deploy-worker-jobs
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        CHROMA_URL=$(gcloud run services describe wm-chroma \
+          --region=${_GCP_REGION} --format='value(status.url)')
+        CHROMA_HOST=${CHROMA_URL#https://}
+        gcloud run deploy wm-worker-jobs \
+          --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA \
+          --region=${_GCP_REGION} \
+          --platform=managed \
+          --port=8080 \
+          --cpu=2 --memory=2Gi \
+          --min-instances=1 --max-instances=3 \
+          --no-cpu-throttling \
+          --no-allow-unauthenticated \
+          --vpc-connector=${_VPC_CONNECTOR} \
+          --vpc-egress=private-ranges-only \
+          --command=/app/start-worker.sh \
+          --args=--mode,jobs \
+          --set-secrets=MONGO_URL=wm-mongo-url:latest,REDIS_URL=wm-redis-url:latest,RABBITMQ_URL=wm-rabbitmq-url:latest \
+          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,CHROMA_HOST=${CHROMA_HOST},CHROMA_PORT=443,CHROMA_SSL=true"
+    waitFor: [deploy-worker-inbound]
+
+  # ── 8. Deploy wm-frontend ─────────────────────────────────────────────────
+  - id: deploy-frontend
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        BACKEND_URL=$(gcloud run services describe wm-backend \
+          --region=${_GCP_REGION} --format='value(status.url)')
+        gcloud run deploy wm-frontend \
+          --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:$COMMIT_SHA \
+          --region=${_GCP_REGION} \
+          --platform=managed \
+          --port=3000 \
+          --cpu=1 --memory=512Mi \
+          --min-instances=1 --max-instances=5 \
+          --allow-unauthenticated \
+          --set-env-vars="BACKEND_URL=${BACKEND_URL}"
+    waitFor: [push-frontend, deploy-backend]
+
+images:
+  - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA
+  - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:$COMMIT_SHA
