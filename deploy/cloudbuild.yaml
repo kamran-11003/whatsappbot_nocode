@@ -83,7 +83,7 @@ steps:
       - --min-instances=1
       - --max-instances=1
       - --no-cpu-throttling
-      - --startup-cpu-boost
+      - --cpu-boost
       - --network=${_VPC_NETWORK}
       - --subnet=${_VPC_SUBNET}
       - --vpc-egress=private-ranges-only
