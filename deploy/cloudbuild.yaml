@@ -112,7 +112,7 @@ steps:
           --cpu=2 --memory=2Gi \
           --min-instances=1 --max-instances=10 \
           --concurrency=80 \
-          --allow-unauthenticated \
+          --no-allow-unauthenticated \
           --network=${_VPC_NETWORK} \
           --subnet=${_VPC_SUBNET} \
           --vpc-egress=private-ranges-only \
@@ -179,6 +179,8 @@ steps:
     waitFor: [deploy-worker-inbound]
 
   # ── 8. Deploy wm-frontend ─────────────────────────────────────────────────
+  # Waits for deploy-worker-jobs so all Cloud Run deploys are fully serialized,
+  # preventing ABORTED conflicts from concurrent revision creation.
   - id: deploy-frontend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: bash
@@ -194,9 +196,38 @@ steps:
           --port=3000 \
           --cpu=1 --memory=512Mi \
           --min-instances=1 --max-instances=5 \
-          --allow-unauthenticated \
+          --no-allow-unauthenticated \
           --set-env-vars="BACKEND_URL=$$BACKEND_URL"
-    waitFor: [push-frontend, deploy-backend]
+    waitFor: [push-frontend, deploy-worker-jobs]
+
+  # ── 9. Fix IAM — allow unauthenticated access to backend & frontend ────────
+  # Org policy blocks --allow-unauthenticated at deploy time, so we apply the
+  # IAM binding explicitly after each service is deployed.
+  - id: fix-iam-backend
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - add-iam-policy-binding
+      - wm-backend
+      - --region=${_GCP_REGION}
+      - --member=allUsers
+      - --role=roles/run.invoker
+    waitFor: [deploy-backend]
+
+  - id: fix-iam-frontend
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - add-iam-policy-binding
+      - wm-frontend
+      - --region=${_GCP_REGION}
+      - --member=allUsers
+      - --role=roles/run.invoker
+    waitFor: [deploy-frontend]
 
 images:
   - ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA
