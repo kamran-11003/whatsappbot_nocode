@@ -58,7 +58,9 @@ cr wm-chroma \
   --cpu=1 --memory=1Gi \
   --min-instances=1 --max-instances=1 \
   --no-cpu-throttling \
-  --vpc-connector="$VPC_CONNECTOR" \
+  --execution-environment=gen2 \
+  --network="${VPC_NETWORK:-default}" \
+  --subnet="${VPC_SUBNET:-default}" \
   --vpc-egress=private-ranges-only \
   --add-volume="name=chroma-data,type=cloud-storage,bucket=${CHROMA_BUCKET}" \
   --add-volume-mount="volume=chroma-data,mount-path=/chroma/chroma" \
@@ -71,7 +73,7 @@ echo "    ChromaDB host: $CHROMA_HOST"
 
 SHARED_SECRETS="MONGO_URL=wm-mongo-url:latest,REDIS_URL=wm-redis-url:latest,RABBITMQ_URL=wm-rabbitmq-url:latest"
 CHROMA_VARS="CHROMA_HOST=${CHROMA_HOST},CHROMA_PORT=443,CHROMA_SSL=true"
-VPC_FLAGS="--vpc-connector=$VPC_CONNECTOR --vpc-egress=private-ranges-only"
+VPC_FLAGS="--execution-environment=gen2 --network=${VPC_NETWORK:-default} --subnet=${VPC_SUBNET:-default} --vpc-egress=private-ranges-only"
 
 # ── Backend ───────────────────────────────────────────────────────────────────
 echo "==> Deploying wm-backend..."

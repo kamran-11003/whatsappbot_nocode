@@ -1,18 +1,20 @@
 # Cloud Build pipeline — triggered on push to the `deploy` branch.
 #
 # Data services (MongoDB, Redis, RabbitMQ) run as Docker containers on the
-# wm-data Compute Engine VM inside the wm-vpc VPC. Cloud Run services reach
-# them through the Serverless VPC Access connector — no external accounts needed.
+# wm-data Compute Engine VM on the default VPC. Cloud Run services reach
+# them via Direct VPC Egress (Cloud Run gen2, no connector needed).
 #
 # Substitution variables (set in Cloud Build trigger UI or --substitutions flag):
-#   _GCP_REGION     e.g. us-central1
-#   _AR_REPO        Artifact Registry repo name, e.g. whatsapp-mate
-#   _VPC_CONNECTOR  Serverless VPC connector name, e.g. wm-connector
+#   _GCP_REGION  e.g. us-central1
+#   _AR_REPO     Artifact Registry repo name, e.g. whatsapp-mate
+#   _VPC_NETWORK VPC network, e.g. default
+#   _VPC_SUBNET  VPC subnet, e.g. default
 
 substitutions:
   _GCP_REGION: us-central1
   _AR_REPO: whatsapp-mate
-  _VPC_CONNECTOR: wm-connector
+  _VPC_NETWORK: default
+  _VPC_SUBNET: default
 
 options:
   logging: CLOUD_LOGGING_ONLY
@@ -70,7 +72,9 @@ steps:
       - --min-instances=1
       - --max-instances=1
       - --no-cpu-throttling
-      - --vpc-connector=${_VPC_CONNECTOR}
+      - --execution-environment=gen2
+      - --network=${_VPC_NETWORK}
+      - --subnet=${_VPC_SUBNET}
       - --vpc-egress=private-ranges-only
       - --add-volume=name=chroma-data,type=cloud-storage,bucket=$PROJECT_ID-chroma-data
       - --add-volume-mount=volume=chroma-data,mount-path=/chroma/chroma
@@ -92,12 +96,14 @@ steps:
           --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA \
           --region=${_GCP_REGION} \
           --platform=managed \
+          --execution-environment=gen2 \
           --port=8000 \
           --cpu=2 --memory=2Gi \
           --min-instances=1 --max-instances=10 \
           --concurrency=80 \
           --allow-unauthenticated \
-          --vpc-connector=${_VPC_CONNECTOR} \
+          --network=${_VPC_NETWORK} \
+          --subnet=${_VPC_SUBNET} \
           --vpc-egress=private-ranges-only \
           --set-secrets=MONGO_URL=wm-mongo-url:latest,REDIS_URL=wm-redis-url:latest,RABBITMQ_URL=wm-rabbitmq-url:latest \
           --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,MONGO_POOL_SIZE=200,CHROMA_HOST=${CHROMA_HOST},CHROMA_PORT=443,CHROMA_SSL=true"
@@ -122,7 +128,9 @@ steps:
           --min-instances=1 --max-instances=5 \
           --no-cpu-throttling \
           --no-allow-unauthenticated \
-          --vpc-connector=${_VPC_CONNECTOR} \
+          --execution-environment=gen2 \
+          --network=${_VPC_NETWORK} \
+          --subnet=${_VPC_SUBNET} \
           --vpc-egress=private-ranges-only \
           --command=/app/start-worker.sh \
           --args=--mode,inbound \
@@ -149,7 +157,9 @@ steps:
           --min-instances=1 --max-instances=3 \
           --no-cpu-throttling \
           --no-allow-unauthenticated \
-          --vpc-connector=${_VPC_CONNECTOR} \
+          --execution-environment=gen2 \
+          --network=${_VPC_NETWORK} \
+          --subnet=${_VPC_SUBNET} \
           --vpc-egress=private-ranges-only \
           --command=/app/start-worker.sh \
           --args=--mode,jobs \

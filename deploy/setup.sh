@@ -44,31 +44,24 @@ gcloud services enable \
   vpcaccess.googleapis.com \
   --quiet
 
-# ── VPC network ───────────────────────────────────────────────────────────────
-echo "==> Creating VPC network: $VPC_NETWORK..."
-gcloud compute networks create "$VPC_NETWORK" \
-  --subnet-mode=custom --quiet 2>/dev/null || echo "    (already exists)"
-
-gcloud compute networks subnets create "$VPC_SUBNET" \
-  --network="$VPC_NETWORK" \
-  --region="$GCP_REGION" \
-  --range="$VPC_SUBNET_RANGE" \
-  --quiet 2>/dev/null || echo "    (subnet already exists)"
-
-# Allow internal traffic within the VPC (Cloud Run → VM)
-gcloud compute firewall-rules create wm-allow-internal \
-  --network="$VPC_NETWORK" \
-  --allow=tcp,udp,icmp \
-  --source-ranges=10.0.0.0/8 \
-  --quiet 2>/dev/null || echo "    (firewall rule already exists)"
-
-# ── Serverless VPC Access connector ──────────────────────────────────────────
+# ── Serverless VPC Access connector (on default network) ─────────────────────
+# NOTE: The connector must be on the same network as the data VM.
+# We use the 'default' network because it already has internet routes,
+# which are required for the connector's internal VMs to bootstrap.
 echo "==> Creating Serverless VPC Access connector: $VPC_CONNECTOR..."
 gcloud compute networks vpc-access connectors create "$VPC_CONNECTOR" \
-  --network="$VPC_NETWORK" \
+  --network=default \
   --region="$GCP_REGION" \
   --range="10.8.0.0/28" \
   --quiet 2>/dev/null || echo "    (connector already exists)"
+
+# Allow traffic from the connector range to the data VM's DB ports
+gcloud compute firewall-rules create wm-allow-db-from-connector \
+  --network=default \
+  --allow=tcp:27017,tcp:6379,tcp:5672 \
+  --source-ranges=10.8.0.0/28 \
+  --target-tags=wm-data \
+  --quiet 2>/dev/null || echo "    (firewall rule already exists)"
 
 # ── Compute Engine VM: data services ─────────────────────────────────────────
 echo "==> Creating data VM (MongoDB + Redis + RabbitMQ)..."
@@ -80,9 +73,7 @@ STARTUP_SCRIPT=$(sed "s/RABBITMQ_PASSWORD_PLACEHOLDER/${RABBITMQ_PASSWORD}/g" \
 gcloud compute instances create wm-data \
   --zone="${GCP_REGION}-a" \
   --machine-type=e2-standard-2 \
-  --network="$VPC_NETWORK" \
-  --subnet="$VPC_SUBNET" \
-  --no-address \
+  --network=default \
   --boot-disk-size=20GB \
   --boot-disk-type=pd-ssd \
   --create-disk="name=wm-data-disk,size=50GB,type=pd-ssd,auto-delete=yes" \
