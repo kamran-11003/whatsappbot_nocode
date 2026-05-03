@@ -48,7 +48,7 @@ steps:
       - -c
       - |
         docker build \
-          --build-arg NEXT_PUBLIC_GEMINI_API_KEY="$GEMINI_API_KEY" \
+          --build-arg NEXT_PUBLIC_GEMINI_API_KEY="$$GEMINI_API_KEY" \
           --build-arg NEXT_PUBLIC_GEMINI_MODEL="${_GEMINI_MODEL}" \
           -t ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:$COMMIT_SHA \
           -t ${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:latest \
