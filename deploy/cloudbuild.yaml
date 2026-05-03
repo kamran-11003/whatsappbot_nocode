@@ -15,7 +15,7 @@ substitutions:
   _AR_REPO: whatsapp-mate
   _VPC_NETWORK: default
   _VPC_SUBNET: default
-  _GEMINI_MODEL: gemini-3.1-flash-lite-preview
+  _GEMINI_MODEL: gemini-2.0-flash-lite
 
 availableSecrets:
   secretManager:
