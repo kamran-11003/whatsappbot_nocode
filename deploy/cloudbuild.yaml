@@ -99,9 +99,9 @@ steps:
     args:
       - -c
       - |
-        CHROMA_URL=$(gcloud run services describe wm-chroma \
+        CHROMA_URL=$$(gcloud run services describe wm-chroma \
           --region=${_GCP_REGION} --format='value(status.url)')
-        CHROMA_HOST=${CHROMA_URL#https://}
+        CHROMA_HOST=$${CHROMA_URL#https://}
         gcloud run deploy wm-backend \
           --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA \
           --region=${_GCP_REGION} \
@@ -116,7 +116,7 @@ steps:
           --subnet=${_VPC_SUBNET} \
           --vpc-egress=private-ranges-only \
           --set-secrets=MONGO_URL=wm-mongo-url:latest,REDIS_URL=wm-redis-url:latest,RABBITMQ_URL=wm-rabbitmq-url:latest \
-          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,MONGO_POOL_SIZE=200,CHROMA_HOST=${CHROMA_HOST},CHROMA_PORT=443,CHROMA_SSL=true"
+          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,MONGO_POOL_SIZE=200,CHROMA_HOST=$$CHROMA_HOST,CHROMA_PORT=443,CHROMA_SSL=true"
     waitFor: [push-backend, deploy-chroma]
 
   # ── 6. Deploy wm-worker-inbound ───────────────────────────────────────────
@@ -126,9 +126,9 @@ steps:
     args:
       - -c
       - |
-        CHROMA_URL=$(gcloud run services describe wm-chroma \
+        CHROMA_URL=$$(gcloud run services describe wm-chroma \
           --region=${_GCP_REGION} --format='value(status.url)')
-        CHROMA_HOST=${CHROMA_URL#https://}
+        CHROMA_HOST=$${CHROMA_URL#https://}
         gcloud run deploy wm-worker-inbound \
           --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA \
           --region=${_GCP_REGION} \
@@ -145,7 +145,7 @@ steps:
           --command=/app/start-worker.sh \
           --args=--mode,inbound \
           --set-secrets=MONGO_URL=wm-mongo-url:latest,REDIS_URL=wm-redis-url:latest,RABBITMQ_URL=wm-rabbitmq-url:latest \
-          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,WORKER_CONCURRENCY=50,CHROMA_HOST=${CHROMA_HOST},CHROMA_PORT=443,CHROMA_SSL=true"
+          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,WORKER_CONCURRENCY=50,CHROMA_HOST=$$CHROMA_HOST,CHROMA_PORT=443,CHROMA_SSL=true"
     waitFor: [deploy-backend]
 
   # ── 7. Deploy wm-worker-jobs ──────────────────────────────────────────────
@@ -155,9 +155,9 @@ steps:
     args:
       - -c
       - |
-        CHROMA_URL=$(gcloud run services describe wm-chroma \
+        CHROMA_URL=$$(gcloud run services describe wm-chroma \
           --region=${_GCP_REGION} --format='value(status.url)')
-        CHROMA_HOST=${CHROMA_URL#https://}
+        CHROMA_HOST=$${CHROMA_URL#https://}
         gcloud run deploy wm-worker-jobs \
           --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-backend:$COMMIT_SHA \
           --region=${_GCP_REGION} \
@@ -174,7 +174,7 @@ steps:
           --command=/app/start-worker.sh \
           --args=--mode,jobs \
           --set-secrets=MONGO_URL=wm-mongo-url:latest,REDIS_URL=wm-redis-url:latest,RABBITMQ_URL=wm-rabbitmq-url:latest \
-          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,CHROMA_HOST=${CHROMA_HOST},CHROMA_PORT=443,CHROMA_SSL=true"
+          --set-env-vars="MONGO_DB=whatsapp_mate,STREAM_PARTITIONS=16,CHROMA_HOST=$$CHROMA_HOST,CHROMA_PORT=443,CHROMA_SSL=true"
     waitFor: [deploy-worker-inbound]
 
   # ── 8. Deploy wm-frontend ─────────────────────────────────────────────────
@@ -184,7 +184,7 @@ steps:
     args:
       - -c
       - |
-        BACKEND_URL=$(gcloud run services describe wm-backend \
+        BACKEND_URL=$$(gcloud run services describe wm-backend \
           --region=${_GCP_REGION} --format='value(status.url)')
         gcloud run deploy wm-frontend \
           --image=${_GCP_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/wm-frontend:$COMMIT_SHA \
@@ -194,7 +194,7 @@ steps:
           --cpu=1 --memory=512Mi \
           --min-instances=1 --max-instances=5 \
           --allow-unauthenticated \
-          --set-env-vars="BACKEND_URL=${BACKEND_URL}"
+          --set-env-vars="BACKEND_URL=$$BACKEND_URL"
     waitFor: [push-frontend, deploy-backend]
 
 images:
